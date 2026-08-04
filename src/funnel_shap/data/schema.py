@@ -9,12 +9,12 @@ table and the feature builder read from one source instead of drifting apart.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 import polars as pl
 
 
-class Availability(str, Enum):
+class Availability(StrEnum):
     PRESENT = "present"
     PROXY = "proxy"
     ABSENT = "absent"

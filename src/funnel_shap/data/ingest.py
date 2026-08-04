@@ -74,7 +74,7 @@ def sha256_of(path: Path, chunk: int = 1 << 20) -> str:
 
 
 def _now() -> str:
-    return dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
+    return dt.datetime.now(dt.UTC).isoformat(timespec="seconds")
 
 
 # --------------------------------------------------------------------------

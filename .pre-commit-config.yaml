@@ -1,0 +1,28 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.10
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: check-merge-conflict
+
+  - repo: local
+    hooks:
+      # The leakage invariants are cheap and are the ones that must never
+      # silently regress, so they gate every commit rather than only CI.
+      - id: leakage-tests
+        name: anti-leakage invariants (protocol Sec. 7.4)
+        entry: .venv/Scripts/python.exe -m pytest tests/test_journey.py tests/test_features.py -q
+        language: system
+        pass_filenames: false
+        types: [python]

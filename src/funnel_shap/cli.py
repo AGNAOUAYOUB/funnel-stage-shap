@@ -69,13 +69,18 @@ def describe_a() -> None:
         typer.echo(f"{key:>14}: {value:,.4f}" if key == "prevalence" else f"{key:>14}: {value:,.0f}")
 
 
+_SOURCE_OPT = typer.Option(None, help="Event-log CSV/glob; omit to use data/raw/rees46/*.csv")
+_SYNTHETIC_OPT = typer.Option(
+    False, help="Run on the synthetic fixture instead of Dataset B (smoke test only)"
+)
+_SUFFIX_OPT = typer.Option("synthetic", help="Which sessionised artefact to read")
+
+
 @app.command()
 def sessionize(
-    source: Path = typer.Option(None, help="Event-log CSV/glob; omit to use data/raw/rees46/*.csv"),
+    source: Path = _SOURCE_OPT,
     gap_minutes: int = 30,
-    synthetic: bool = typer.Option(
-        False, help="Run on the synthetic fixture instead of Dataset B (smoke test only)"
-    ),
+    synthetic: bool = _SYNTHETIC_OPT,
 ) -> None:
     """Clean and sessionise the event stream (Sec. 7.1-7.2)."""
     paths.ensure_dirs()
@@ -117,9 +122,7 @@ def sessionize(
 
 
 @app.command()
-def build_features(
-    suffix: str = typer.Option("synthetic", help="Which sessionised artefact to read"),
-) -> None:
+def build_features(suffix: str = _SUFFIX_OPT) -> None:
     """Build the nested stage-prefix feature matrices (Sec. 7.4, Sec. 8)."""
     paths.ensure_dirs()
 
