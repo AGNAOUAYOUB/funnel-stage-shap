@@ -97,7 +97,9 @@ def test_counts_are_computed_on_the_prefix_only() -> None:
     s1 = _features_for(rows, "S1")
     s2 = _features_for(rows, "S2")
 
-    assert s1["n_events"][0] == 1
+    # S1 closes at the second interaction (amendment A6), S2 at the category
+    # switch on event 3.
+    assert s1["n_events"][0] == 2
     assert s2["n_events"][0] == 3
     assert s2["n_views"][0] == 3
 
@@ -115,17 +117,24 @@ def test_dwell_excludes_the_final_event() -> None:
     assert s2["dwell_total_s"][0] == pytest.approx(90.0)
 
 
-def test_single_event_prefix_has_zero_gaps_not_nulls() -> None:
+def test_minimal_prefix_has_measurable_features_not_constants() -> None:
+    """Amendment A6's purpose: the smallest S1 prefix still carries real signal."""
     rows = [
         ("2019-10-01 00:00:00", "view", 1, 1),
         ("2019-10-01 00:00:30", "view", 2, 2),
     ]
     s1 = _features_for(rows, "S1")
-    assert s1["n_events"][0] == 1
-    assert s1["inter_event_mean_s"][0] == 0.0
-    assert s1["dwell_total_s"][0] == 0.0
-    assert s1["prefix_duration_s"][0] == 0.0
+    assert s1["n_events"][0] == 2
+    assert s1["prefix_duration_s"][0] == pytest.approx(30.0)
+    assert s1["inter_event_mean_s"][0] == pytest.approx(30.0)
+    assert s1["dwell_total_s"][0] == pytest.approx(30.0)
+    assert s1["category_entropy"][0] == pytest.approx(math.log(2))
     assert math.isfinite(s1["click_velocity"][0])
+
+    # A two-event prefix has exactly one gap, so its std is undefined; the
+    # zero-fill must turn that into 0.0 rather than leaking a null into the
+    # model matrix.
+    assert s1["inter_event_std_s"][0] == 0.0
 
 
 def test_category_entropy_is_zero_for_a_single_category() -> None:

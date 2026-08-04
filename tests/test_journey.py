@@ -115,15 +115,35 @@ def test_unknown_stage_is_refused() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_s1_cuts_at_the_first_view() -> None:
+def test_s1_cuts_at_the_second_product_interaction() -> None:
+    """Amendment A6: cutting at the first view left S1 with a one-event prefix."""
     lazy = _log(
         [
             ("2019-10-01 00:00:00", "view", 1, 1),
             ("2019-10-01 00:00:30", "view", 2, 2),
+            ("2019-10-01 00:01:00", "view", 3, 3),
         ]
     )
     cuts = stage_cutpoints(lazy)
-    assert cuts["cut_S1"][0] == 0
+    assert cuts["cut_S1"][0] == 1
+
+
+def test_s1_prefix_always_has_at_least_two_events(sessionised, cutpoints) -> None:
+    """The whole point of amendment A6: S1 features must not be constant."""
+    prefix = prefix_events(sessionised.lazy(), cutpoints, "S1").collect()
+    counts = prefix.group_by("session_id").agg(pl.len().alias("n"))
+    assert counts["n"].min() >= 2
+
+
+def test_s1_is_unreached_when_only_one_interaction_precedes_purchase() -> None:
+    lazy = _log(
+        [
+            ("2019-10-01 00:00:00", "view", 1, 1),
+            ("2019-10-01 00:00:30", "purchase", 1, 1),
+        ]
+    )
+    cuts = stage_cutpoints(lazy)
+    assert cuts["cut_S1"][0] is None
 
 
 def test_s2_cuts_at_the_first_category_switch() -> None:
@@ -180,13 +200,14 @@ def test_cart_after_purchase_does_not_open_s3() -> None:
     lazy = _log(
         [
             ("2019-10-01 00:00:00", "view", 1, 1),
+            ("2019-10-01 00:00:15", "view", 2, 1),
             ("2019-10-01 00:00:30", "purchase", 1, 1),
             ("2019-10-01 00:01:00", "cart", 2, 1),
         ]
     )
     cuts = stage_cutpoints(lazy)
     assert cuts["cut_S3"][0] is None
-    assert cuts["cut_S1"][0] == 0
+    assert cuts["cut_S1"][0] == 1
 
 
 # ---------------------------------------------------------------------------
@@ -212,6 +233,21 @@ def test_deeper_stages_have_higher_prevalence(cutpoints) -> None:
     table = stage_prevalence_table(cutpoints)
     prevalence = {r["stage"]: r["prevalence"] for r in table.to_dicts()}
     assert prevalence["S3"] > prevalence["S1"]
+
+
+def test_distinctness_table_reports_stage_collapse(cutpoints) -> None:
+    """Amendment A8: the S1->S2 leg of the migration figure is mostly degenerate."""
+    from funnel_shap.data.journey import stage_distinctness_table
+
+    table = stage_distinctness_table(cutpoints)
+    rows = {r["pair"]: r for r in table.to_dicts()}
+
+    assert set(rows) == {"S1->S2", "S2->S3"}
+    # S2->S3 is cleanly separated; S1->S2 is not. If a future change to the
+    # cut-point definitions fixes this, the assertion below should be tightened
+    # rather than deleted -- it is the guard on the centrepiece figure.
+    assert rows["S2->S3"]["share_identical"] == 0.0
+    assert rows["S1->S2"]["share_identical"] > 0.5
 
 
 def test_ordering_is_deterministic_under_timestamp_collisions() -> None:

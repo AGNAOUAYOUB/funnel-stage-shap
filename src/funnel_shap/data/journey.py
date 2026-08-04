@@ -44,7 +44,8 @@ STAGES: tuple[StageName, ...] = ("S1", "S2", "S3", "S4")
 MODELLING_STAGES: tuple[StageName, ...] = ("S1", "S2", "S3")
 
 STAGE_DEFINITIONS: dict[StageName, str] = {
-    "S1": "session entry -> first product interaction; cut-point = first view",
+    "S1": "session entry -> initial catalogue contact; cut-point = second product "
+          "interaction (amendment A6)",
     "S2": "product/category browsing; cut-point = first repeat view or category switch",
     "S3": "cart activity begins; cut-point = first cart event",
     "S4": "checkout/purchase window; cut-point = purchase or session end",
@@ -105,6 +106,16 @@ def stage_cutpoints(lazy: pl.LazyFrame, config: JourneyConfig | None = None) -> 
     ordered = order_events(lazy, config)
     etype = pl.col(config.type_column).cast(pl.Utf8)
 
+    # Product interaction: any event carrying a product. In a REES46-class log
+    # every event does, but the predicate is written explicitly so a source with
+    # non-product events (site search, static pages) degrades correctly.
+    product_interaction = pl.col(config.product_column).is_not_null()
+    interaction_ordinal = (
+        pl.when(product_interaction)
+        .then(product_interaction.cum_sum().over(s))
+        .otherwise(None)
+    )
+
     # Repeat view: this product has been seen earlier in the same session.
     repeat_view = (etype == "view") & (
         pl.col(config.product_column).cum_count().over([s, config.product_column]) > 1
@@ -125,6 +136,7 @@ def stage_cutpoints(lazy: pl.LazyFrame, config: JourneyConfig | None = None) -> 
     per_session = (
         ordered.with_columns(
             _first_index_where(etype == "view", s).alias("_first_view"),
+            _first_index_where(interaction_ordinal == 2, s).alias("_second_interaction"),
             _first_index_where(repeat_view, s).alias("_first_repeat_view"),
             _first_index_where(category_switch, s).alias("_first_cat_switch"),
             _first_index_where(etype == "cart", s).alias("_first_cart"),
@@ -133,6 +145,7 @@ def stage_cutpoints(lazy: pl.LazyFrame, config: JourneyConfig | None = None) -> 
         .group_by(s)
         .agg(
             pl.first("_first_view").alias("first_view"),
+            pl.first("_second_interaction").alias("second_interaction"),
             pl.first("_first_repeat_view").alias("first_repeat_view"),
             pl.first("_first_cat_switch").alias("first_cat_switch"),
             pl.first("_first_cart").alias("first_cart"),
@@ -151,7 +164,13 @@ def stage_cutpoints(lazy: pl.LazyFrame, config: JourneyConfig | None = None) -> 
         .otherwise(pl.col("n_events") - 1)
     )
 
-    cut_s1 = pl.col("first_view")
+    # S1 closes at the *second* product interaction, not the first (amendment
+    # A6). Cutting at the first view produced a one-event prefix in which 19 of
+    # 23 features were constant, which would have made the H1 curve an artefact
+    # of S1 having no features and H2 circular at S1. Two interactions is the
+    # minimum that gives awareness a measurable dwell, inter-event gap and
+    # category distribution.
+    cut_s1 = pl.col("second_interaction")
     # min_horizontal ignores nulls, which is what we want here: the earlier of
     # whichever S2 trigger actually fired.
     cut_s2 = pl.min_horizontal(pl.col("first_repeat_view"), pl.col("first_cat_switch"))
@@ -177,6 +196,39 @@ def stage_cutpoints(lazy: pl.LazyFrame, config: JourneyConfig | None = None) -> 
         + [f"cut_{st}" for st in STAGES]
         + [f"reached_{st}" for st in STAGES]
     )
+
+
+def stage_distinctness_table(cutpoints: pl.DataFrame) -> pl.DataFrame:
+    """How often consecutive stages share a cut-point, i.e. carry identical prefixes.
+
+    Moving S1's cut-point forward to the second interaction (amendment A6) buys
+    S1 real features, but it moves S1 closer to S2, whose earliest possible
+    trigger is also the second interaction. If a large share of sessions have
+    ``cut_S1 == cut_S2`` then the two stages are the same model on the same rows
+    and the attribution "migration" between them is trivially empty.
+
+    This table must be reported alongside the migration figure: a migration
+    trajectory is only interpretable between stages that are actually distinct.
+    """
+    rows = []
+    for early, late in (("S1", "S2"), ("S2", "S3")):
+        both = cutpoints.filter(
+            pl.col(f"cut_{early}").is_not_null() & pl.col(f"cut_{late}").is_not_null()
+        )
+        n = both.height
+        identical = int((both[f"cut_{early}"] == both[f"cut_{late}"]).sum()) if n else 0
+        rows.append(
+            {
+                "pair": f"{early}->{late}",
+                "n_sessions_reaching_both": n,
+                "n_identical_cutpoint": identical,
+                "share_identical": identical / n if n else float("nan"),
+                "mean_extra_events": (
+                    float((both[f"cut_{late}"] - both[f"cut_{early}"]).mean()) if n else float("nan")
+                ),
+            }
+        )
+    return pl.DataFrame(rows)
 
 
 def _clip(expr: pl.Expr, upper: pl.Expr) -> pl.Expr:

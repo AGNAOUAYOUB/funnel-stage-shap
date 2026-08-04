@@ -5,8 +5,8 @@ Each entry records the date, the affected protocol sections, what changed, and w
 
 The protocol is **not yet frozen**: the environment is pinned and the data/feature layer is
 built and tested, but no split has been written to `data/processed/splits/` and the test
-partition has never been read. Entries below are pre-freeze implementation decisions that
-the protocol left open, recorded here so the eventual freeze is auditable.
+partition has never been read. Entries below are pre-freeze decisions and open questions,
+recorded so the eventual freeze is auditable.
 
 ---
 
@@ -71,45 +71,82 @@ and ~15% prevalence exactly.
 submission:** re-fetch from the canonical UCI endpoint via `funnel-shap fetch-a` and confirm
 the hash, so provenance does not rest on a working copy of unknown history.
 
-### A6. OPEN ISSUE — S1 as defined yields a one-event prefix (Sec. 7.3, RQ1, H1)
+### A6. RESOLVED — S1's cut-point moves to the second product interaction (Sec. 7.3)
 
-**Not a decision. A protocol question that needs answering before freeze.**
+**Decision (2026-08-04, author).** S1 closes at the *second* product interaction rather than
+the first view. Sec. 7.3's S1 row is amended to: "session entry → initial catalogue contact;
+cut-point = second product interaction".
 
-Sec. 7.3 defines S1 as "session entry → first product interaction" with cut-point "first
-view". Sessions in an event log almost always *open* with a view, so `cut_S1 = 0` and the
-S1 prefix is a single event. Measured on the synthetic fixture: mean S1 prefix length is
-exactly 1.0 event, and **19 of 23 S1 features are constant across all sessions** — every
-count, duration, gap, entropy, velocity and transition feature is degenerate because a
-one-event prefix has no second event to measure against.
+**Effect, measured.** Constant S1 features fell from **19 of 23 to 4 of 23**. The minimum S1
+prefix is now two events, which is what makes dwell, inter-event gap and category entropy
+measurable at all. The four that remain constant (`n_events`, `n_views`,
+`inter_event_std_s`, `purchase_intent_score`) are constant by construction of a two-event
+prefix; A8 subsumes them.
 
-The only features that vary at S1 are `hour_of_day`, `is_weekend`, `price_mean` and
-`price_max` — i.e. time-of-day plus the price of the single product viewed.
+**Original problem, retained for the record.** Sec. 7.3 defined S1 as "session entry → first
+product interaction" with cut-point "first view". Sessions in an event log almost always
+*open* with a view, so `cut_S1 = 0` and the S1 prefix was a single event: mean S1 prefix
+length exactly 1.0, with 19 of 23 features constant, because a one-event prefix has no
+second event to measure against. Only `hour_of_day`, `is_weekend`, `price_mean` and
+`price_max` varied. Consequences had it stood: RQ1/H1 would have compared a near-null S1
+model against genuine S2/S3 models, so the improvement curve would have measured S1's lack
+of features rather than the journey becoming more predictable; and RQ2/H2 — "attribution
+mass migrates from context to behaviour" — would have been circular at S1, since context
+features were the only non-constant ones there.
 
-This is not an implementation artefact; it follows directly from the stated cut-point. Its
-consequences:
+Candidates considered: (1) cut at the second product interaction — **chosen**; (2) define S1
+as a time or event window; (3) drop S1 from the modelling set and report the curve over
+S2/S3 only.
 
-- **RQ1/H1** would compare a near-null S1 model against genuine S2/S3 models. The
-  improvement curve would be dominated by S1 having almost no features, not by the journey
-  becoming more predictive.
-- **RQ2/H2** — "attribution mass migrates from context to behaviour" — is close to
-  guaranteed at S1 by construction, since only context features are non-constant there.
-  Confirming H2 on this definition would be circular.
+### A8. OPEN ISSUE — "cut at first X" destroys the signal each stage is named for (Sec. 7.3, 7.4)
 
-Three candidate resolutions, in order of preference:
+**Not a decision. A protocol question, surfaced by measuring A6's effect.**
 
-1. **Redefine S1's cut-point as the first *repeat or second* product interaction** — i.e.
-   awareness spans entry through the visitor's first engagement signal, not the entry event
-   itself. Keeps four honest stages and gives S1 real features.
-2. **Define S1 by elapsed time or event budget** (e.g. the first 60 seconds, or first 3
-   events), making awareness a window rather than a single instant.
-3. **Drop S1 from the modelling set** and report the curve over S2/S3 only, stating that
-   awareness carries no behavioural signal by construction.
+Sec. 7.4 says features use "the prefix of events up to Sk's cut-point", and Sec. 7.3 sets
+each cut-point at the *first* occurrence of the stage's trigger. Combining the two means a
+stage's prefix ends exactly when that stage opens — so the stage's own behaviour is excluded
+from its own feature vector. Two measured consequences:
 
-Option 1 or 2 requires a Sec. 7.3 amendment before freeze; option 3 requires amending
-Sec. 9.2 and H1. Deciding this *after* seeing test-set results would not be defensible, so
-it must be settled now.
+**S3's cart features are constant by construction.** S3 cuts at the first cart event, so the
+prefix contains exactly one cart event, always. `n_cart_adds` = 1, `n_cart_removes` = 0 (a
+removal cannot precede the first add), `time_since_last_cart_s` = 0. All three features that
+make S3 the *intent* stage carry zero information. This is structural, not a fixture
+artefact — it will hold identically on REES46.
 
-### A7. Python 3.13 is present on the machine; the project pins 3.11 (Sec. 4)
+**S1 and S2 are nearly the same stage.** With S1 at the second interaction and S2 at the
+first repeat view or category switch, **82.8%** of sessions reaching both have an identical
+cut-point (mean 0.21 extra events between them). For most sessions the S1 and S2 models are
+the same model fitted on the same rows, so the S1→S2 leg of the attribution-migration
+trajectory — the paper's centrepiece figure — is trivially empty. S2→S3 is by contrast
+cleanly distinct (0% identical, mean 5.5 extra events).
+
+`stage_distinctness_table` computes both figures and must be reported alongside the
+migration figure: a migration trajectory is only interpretable between stages that are
+actually distinct.
+
+**Proposed resolution: prefixes run *through* a stage, not up to its opening.** Define Sk's
+prefix as all events from session entry to just before stage Sk+1's trigger fires:
+
+| Stage | Prefix spans |
+|---|---|
+| S1 | entry → just before the first repeat view / category switch |
+| S2 | entry → just before the first cart event |
+| S3 | entry → just before the purchase (all cart activity included) |
+
+This is arguably what Sec. 7.3's own table intends: its Definition column describes each
+stage as a *span* ("product/category browsing", "cart activity begins"), and a stage called
+Intent should contain the intent behaviour. Nesting still holds strictly, every stage becomes
+distinct by construction, cart-count and cart-recency features become informative at S3, and
+no prefix contains the purchase — so the Sec. 7.4 anti-leakage guarantee is unchanged.
+
+**Cost.** Amends Sec. 7.3/7.4 wording and shifts what each stage means, so RQ2's migration
+narrative is re-anchored. No leakage guarantee weakens.
+
+**Alternative.** Keep the current definition and report the S1→S2 leg as structurally
+degenerate, running the migration analysis over S2→S3 only. Cheaper, but it costs the paper
+a stage and leaves S3's cart features as dead weight.
+
+### A9. Python 3.13 is present on the machine; the project pins 3.11 (Sec. 4)
 
 **Decision.** The project venv is CPython 3.11.15, provisioned by `uv`, independent of the
 system 3.13.
