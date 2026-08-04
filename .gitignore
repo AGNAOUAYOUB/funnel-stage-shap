@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data — tracked by DVC, never by git
+/data/raw/*
+/data/interim/*
+/data/processed/*
+!/data/**/.gitignore
+!/data/raw/DATASETS.md
+!/data/**/*.dvc
+
+# Experiment output
+/experiments/mlruns/
+/experiments/optuna/
+/reports/figures/*
+/reports/tables/*
+!/reports/figures/.gitkeep
+!/reports/tables/.gitkeep
+
+# OS
+Thumbs.db
+.DS_Store

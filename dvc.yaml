@@ -1,0 +1,72 @@
+# Pipeline stages (protocol Sec. 6.1, run sheet Sec. 13).
+# Stages 1-5 of the run sheet are implemented; modelling stages follow.
+
+stages:
+  tables:
+    # Run-sheet step 5 (partial): the two auditable protocol tables.
+    cmd: python -m funnel_shap.cli tables
+    deps:
+      - src/funnel_shap/data/schema.py
+      - src/funnel_shap/features/dictionary.py
+    outs:
+      - reports/tables/variable_availability.csv:
+          cache: false
+      - reports/tables/feature_availability_by_stage.csv:
+          cache: false
+
+  sessionize:
+    # Run-sheet steps 3-4: clean -> sessionise -> stage cut-points.
+    cmd: python -m funnel_shap.cli sessionize --gap-minutes 30
+    deps:
+      - data/raw/rees46
+      - src/funnel_shap/data/sessionize.py
+      - src/funnel_shap/data/journey.py
+    outs:
+      - data/interim/sessions_gap30.parquet
+      - data/interim/cutpoints_gap30.parquet
+    metrics:
+      - reports/tables/data_flow_gap30.csv:
+          cache: false
+      - reports/tables/stage_prevalence_gap30.csv:
+          cache: false
+
+  features:
+    # Run-sheet step 5: nested prefix feature matrices per stage.
+    cmd: python -m funnel_shap.cli build-features --suffix gap30
+    deps:
+      - data/interim/sessions_gap30.parquet
+      - data/interim/cutpoints_gap30.parquet
+      - src/funnel_shap/features/prefix_features.py
+      - src/funnel_shap/features/dictionary.py
+    outs:
+      - data/processed/features_gap30_S1.parquet
+      - data/processed/features_gap30_S2.parquet
+      - data/processed/features_gap30_S3.parquet
+
+  # Sensitivity arm for the Sec. 7.2 appendix. Not on the critical path.
+  sessionize_sensitivity:
+    foreach: [15, 60]
+    do:
+      cmd: python -m funnel_shap.cli sessionize --gap-minutes ${item}
+      deps:
+        - data/raw/rees46
+        - src/funnel_shap/data/sessionize.py
+      outs:
+        - data/interim/sessions_gap${item}.parquet
+        - data/interim/cutpoints_gap${item}.parquet
+      metrics:
+        - reports/tables/stage_prevalence_gap${item}.csv:
+            cache: false
+
+# Remaining run-sheet steps (6-16) are added as their modules land:
+#   6.  freeze splits        -> data/processed/splits/
+#   7.  baselines on A       -> static SHAP
+#   8.  stage models on B    -> prediction-improvement curve
+#   9.  sequence model on B  -> train, calibrate
+#   10. tuning (nested CV, Optuna), >=5 seeds
+#   11. predictive evaluation + ablation
+#   12. layer-1 stage SHAP + migration analysis
+#   13. layer-2 TimeSHAP
+#   14. layer-3 faithfulness / stability / consistency
+#   15. statistical tests + corrections
+#   16. figures, tables, write-up

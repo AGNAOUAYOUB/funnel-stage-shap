@@ -1,0 +1,38 @@
+# Appendix A run-config template. Copy into configs/experiments/ and edit;
+# do not run from this file directly.
+run:
+  name: stageS3_lightgbm_seed17
+  git_commit: <auto>
+  seed: 17
+
+  data:
+    dataset: B                    # A | B
+    stage: S3                     # S1 | S2 | S3 | S4 | static
+    split: temporal               # temporal | grouped
+    sessionization_gap_min: 30    # 15 | 30 | 60 (30 = headline, others = sensitivity)
+
+  model:
+    type: lightgbm
+    params: {n_estimators: 800, learning_rate: 0.03, num_leaves: 63}
+    calibrate: isotonic
+
+  imbalance:
+    method: class_weight          # class_weight | smote | none (train-fold only)
+
+  tuning:
+    optuna_trials: 100
+    nested_cv_outer: 5
+    nested_cv_inner: 3
+
+  explain:
+    tree_shap_mode: interventional
+    background_size: 2000
+    faithfulness: [deletion, insertion, ablation]
+    faithfulness_threshold: 0.5
+    cross_paradigm_spearman_threshold: 0.6
+
+  eval:
+    primary_metric: pr_auc
+    bootstrap_resamples: 2000
+    alpha: 0.05
+    correction: holm
