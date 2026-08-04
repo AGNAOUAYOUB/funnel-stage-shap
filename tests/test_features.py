@@ -51,10 +51,29 @@ def test_columns_match_the_dictionary(sessionised, cutpoints, stage) -> None:
     assert frame.columns == ["session_id", "label", *feature_names(stage)]
 
 
-def test_cart_features_exist_only_at_s3() -> None:
-    assert "n_cart_adds" not in feature_names("S1")
-    assert "time_since_last_cart_s" not in feature_names("S2")
-    assert "n_cart_adds" in feature_names("S3")
+def test_no_cart_count_features_anywhere() -> None:
+    """Amendment A8: constant by construction at S3, undefined earlier."""
+    for stage in MODELLING_STAGES:
+        names = feature_names(stage)
+        assert "n_cart_adds" not in names
+        assert "n_cart_removes" not in names
+        assert "time_since_last_cart_s" not in names
+
+
+@pytest.mark.parametrize("stage", MODELLING_STAGES)
+def test_no_feature_is_constant_by_construction(sessionised, cutpoints, stage) -> None:
+    """A zero-variance column is dead weight and a meaningless migration bar.
+
+    This is the guard that caught the S1 one-event prefix (A6) and S3's cart
+    counts (A8). If it fails, the cut-point definition and the feature
+    dictionary have gone out of step again -- fix the definition, do not
+    weaken the test.
+    """
+    prefix = prefix_events(sessionised.lazy(), cutpoints, stage)
+    frame = build_stage_features(prefix, stage)
+
+    constant = [c for c in feature_names(stage) if frame[c].n_unique() == 1]
+    assert not constant, f"{stage} has constant features: {constant}"
 
 
 def test_s4_has_no_feature_matrix() -> None:
@@ -90,18 +109,23 @@ def test_counts_are_computed_on_the_prefix_only() -> None:
     rows = [
         ("2019-10-01 00:00:00", "view", 1, 1),
         ("2019-10-01 00:00:30", "view", 2, 1),
-        ("2019-10-01 00:01:00", "view", 3, 2),  # S2 cut here
-        ("2019-10-01 00:02:00", "view", 4, 3),
+        ("2019-10-01 00:01:00", "view", 3, 2),  # signal 1: category switch
+        ("2019-10-01 00:02:00", "view", 4, 3),  # signal 2: category switch, S2 cut
         ("2019-10-01 00:03:00", "cart", 4, 3),
     ]
-    s1 = _features_for(rows, "S1")
-    s2 = _features_for(rows, "S2")
+    lazy = _log(rows)
+    cuts = stage_cutpoints(lazy)
 
-    # S1 closes at the second interaction (amendment A6), S2 at the category
-    # switch on event 3.
-    assert s1["n_events"][0] == 2
-    assert s2["n_events"][0] == 3
-    assert s2["n_views"][0] == 3
+    # S1 closes at the second interaction (A6), S2 at the second browsing
+    # signal (A8). n_events is not an S1 feature precisely because it is fixed
+    # there, so the prefix size is checked on the events themselves.
+    assert prefix_events(lazy, cuts, "S1").collect().height == 2
+
+    s1 = build_stage_features(prefix_events(lazy, cuts, "S1"), "S1")
+    s2 = build_stage_features(prefix_events(lazy, cuts, "S2"), "S2")
+    assert s1["n_unique_products"][0] == 2
+    assert s2["n_events"][0] == 4
+    assert s2["n_views"][0] == 4
 
 
 def test_dwell_excludes_the_final_event() -> None:
@@ -109,12 +133,13 @@ def test_dwell_excludes_the_final_event() -> None:
     rows = [
         ("2019-10-01 00:00:00", "view", 1, 1),
         ("2019-10-01 00:00:30", "view", 2, 1),
-        ("2019-10-01 00:01:30", "view", 1, 1),  # repeat -> S2 cut at idx 2
+        ("2019-10-01 00:01:30", "view", 1, 1),  # signal 1: repeat of product 1
+        ("2019-10-01 00:03:30", "view", 2, 1),  # signal 2: repeat -> S2 cut at idx 3
     ]
     s2 = _features_for(rows, "S2")
-    # Dwells inside the prefix: 30s (event 0 -> 1) and 60s (event 1 -> 2).
-    # Event 2 is last, contributing nothing.
-    assert s2["dwell_total_s"][0] == pytest.approx(90.0)
+    # Dwells inside the prefix: 30s, 60s, 120s. Event 3 is last and contributes
+    # nothing, since its dwell would need the event after the cut-point.
+    assert s2["dwell_total_s"][0] == pytest.approx(210.0)
 
 
 def test_minimal_prefix_has_measurable_features_not_constants() -> None:
@@ -124,24 +149,23 @@ def test_minimal_prefix_has_measurable_features_not_constants() -> None:
         ("2019-10-01 00:00:30", "view", 2, 2),
     ]
     s1 = _features_for(rows, "S1")
-    assert s1["n_events"][0] == 2
     assert s1["prefix_duration_s"][0] == pytest.approx(30.0)
     assert s1["inter_event_mean_s"][0] == pytest.approx(30.0)
     assert s1["dwell_total_s"][0] == pytest.approx(30.0)
     assert s1["category_entropy"][0] == pytest.approx(math.log(2))
     assert math.isfinite(s1["click_velocity"][0])
 
-    # A two-event prefix has exactly one gap, so its std is undefined; the
-    # zero-fill must turn that into 0.0 rather than leaking a null into the
-    # model matrix.
-    assert s1["inter_event_std_s"][0] == 0.0
+    # A two-event prefix has exactly one gap, so its std is undefined -- which
+    # is why inter_event_std_s is not an S1 feature at all.
+    assert "inter_event_std_s" not in s1.columns
 
 
 def test_category_entropy_is_zero_for_a_single_category() -> None:
     rows = [
         ("2019-10-01 00:00:00", "view", 1, 1),
         ("2019-10-01 00:00:30", "view", 2, 1),
-        ("2019-10-01 00:01:00", "view", 1, 1),  # repeat -> S2 cut at idx 2
+        ("2019-10-01 00:01:00", "view", 1, 1),  # signal 1: repeat
+        ("2019-10-01 00:01:30", "view", 2, 1),  # signal 2: repeat -> S2 cut
     ]
     s2 = _features_for(rows, "S2")
     assert s2["n_unique_categories"][0] == 1
@@ -150,14 +174,14 @@ def test_category_entropy_is_zero_for_a_single_category() -> None:
 
 
 def test_category_entropy_matches_the_closed_form() -> None:
-    """Two categories, 2 events each => H = log(2)."""
+    """Two categories, one event each => H = log(2)."""
     rows = [
         ("2019-10-01 00:00:00", "view", 1, 1),
-        ("2019-10-01 00:00:30", "view", 2, 2),  # switch -> S2 cut at idx 1
+        ("2019-10-01 00:00:30", "view", 2, 2),  # switch -> S1 cut at idx 1
     ]
     lazy = _log(rows)
     cuts = stage_cutpoints(lazy)
-    frame = build_stage_features(prefix_events(lazy, cuts, "S2"), "S2")
+    frame = build_stage_features(prefix_events(lazy, cuts, "S1"), "S1")
     assert frame["category_entropy"][0] == pytest.approx(math.log(2))
     assert frame["category_entropy_normalised"][0] == pytest.approx(1.0)
 
@@ -165,22 +189,23 @@ def test_category_entropy_matches_the_closed_form() -> None:
 def test_transition_count_counts_category_changes() -> None:
     rows = [
         ("2019-10-01 00:00:00", "view", 1, 1),
-        ("2019-10-01 00:00:30", "view", 2, 2),  # transition, S2 cut
-        ("2019-10-01 00:01:00", "view", 3, 3),
+        ("2019-10-01 00:00:30", "view", 2, 2),  # transition 1
+        ("2019-10-01 00:01:00", "view", 3, 3),  # transition 2 -> S2 cut at idx 2
     ]
     s2 = _features_for(rows, "S2")
-    assert s2["n_category_transitions"][0] == 1
+    assert s2["n_category_transitions"][0] == 2
 
 
 def test_product_revisit_rate() -> None:
     rows = [
         ("2019-10-01 00:00:00", "view", 1, 1),
         ("2019-10-01 00:00:30", "view", 2, 1),
-        ("2019-10-01 00:01:00", "view", 1, 1),  # repeat -> S2 cut at idx 2
+        ("2019-10-01 00:01:00", "view", 1, 1),  # signal 1: repeat
+        ("2019-10-01 00:01:30", "view", 2, 1),  # signal 2: repeat -> S2 cut at idx 3
     ]
     s2 = _features_for(rows, "S2")
-    # 1 of 3 prefix events lands on an already-seen product.
-    assert s2["product_revisit_rate"][0] == pytest.approx(1 / 3)
+    # 2 of 4 prefix events land on an already-seen product.
+    assert s2["product_revisit_rate"][0] == pytest.approx(0.5)
 
 
 def test_intent_composite_uses_documented_weights() -> None:
@@ -194,23 +219,13 @@ def test_intent_composite_uses_documented_weights() -> None:
     assert s3["purchase_intent_score"][0] == pytest.approx(6.0)
 
 
-def test_time_since_last_cart_is_zero_at_the_cut_point() -> None:
-    """S3's cut-point IS the first cart, so recency is zero unless a later cart exists."""
-    rows = [
-        ("2019-10-01 00:00:00", "view", 1, 1),
-        ("2019-10-01 00:01:00", "cart", 1, 1),
-    ]
-    s3 = _features_for(rows, "S3")
-    assert s3["time_since_last_cart_s"][0] == pytest.approx(0.0)
-
-
 def test_click_velocity_is_finite_and_positive() -> None:
     rows = [
         ("2019-10-01 00:00:00", "view", 1, 1),
         ("2019-10-01 00:00:30", "view", 2, 2),
     ]
-    s2 = _features_for(rows, "S2")
-    assert s2["click_velocity"][0] == pytest.approx(2 / 30, rel=1e-3)
+    s1 = _features_for(rows, "S1")
+    assert s1["click_velocity"][0] == pytest.approx(2 / 30, rel=1e-3)
 
 
 # ---------------------------------------------------------------------------
@@ -222,12 +237,13 @@ def test_features_ignore_events_after_the_cut_point() -> None:
     """Appending post-cut-point events must not change earlier stages' features."""
     base = [
         ("2019-10-01 00:00:00", "view", 1, 1),
-        ("2019-10-01 00:00:30", "view", 2, 2),  # S2 cut at idx 1
+        ("2019-10-01 00:00:30", "view", 2, 2),  # signal 1
+        ("2019-10-01 00:01:00", "view", 3, 3),  # signal 2 -> S2 cut at idx 2
     ]
     extended = base + [
-        ("2019-10-01 00:05:00", "view", 3, 3),
-        ("2019-10-01 00:06:00", "cart", 3, 3),
-        ("2019-10-01 00:07:00", "purchase", 3, 3),
+        ("2019-10-01 00:05:00", "view", 4, 4),
+        ("2019-10-01 00:06:00", "cart", 4, 4),
+        ("2019-10-01 00:07:00", "purchase", 4, 4),
     ]
 
     for stage in ("S1", "S2"):

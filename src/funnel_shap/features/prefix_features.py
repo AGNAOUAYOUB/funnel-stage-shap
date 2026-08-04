@@ -158,18 +158,9 @@ def build_stage_features(
             pl.col("price").mean().alias("price_mean"),
             pl.col("price").max().alias("price_max"),
         ]
-    if stage == "S3":
-        aggregations += [
-            (etype == "cart").sum().alias("n_cart_adds"),
-            (etype == "remove_from_cart").sum().alias("n_cart_removes"),
-            (
-                pl.col(config.time_column).max()
-                - pl.when(etype == "cart").then(pl.col(config.time_column)).otherwise(None).max()
-            )
-            .dt.total_microseconds()
-            .truediv(1_000_000)
-            .alias("time_since_last_cart_s"),
-        ]
+    # No cart-specific aggregations: see the amendment A8 note in dictionary.py.
+    # At S3's cut-point the prefix holds exactly one cart event, so every such
+    # feature is a constant.
 
     grouped = enriched.group_by(s).agg(aggregations).collect()
 

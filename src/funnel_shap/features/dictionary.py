@@ -40,8 +40,10 @@ COMPOSITE = "composite"
 
 FEATURE_DICTIONARY: tuple[FeatureSpec, ...] = (
     # ---- Behavioural counts (Sec. 8) -----------------------------------
-    FeatureSpec("n_events", "counts", "events in the prefix", MODELLING_STAGES, BASELINE),
-    FeatureSpec("n_views", "counts", "view events in the prefix", MODELLING_STAGES, BASELINE),
+    # S1 spans exactly two product interactions by definition (A6), so its event
+    # and view counts cannot vary and are excluded there.
+    FeatureSpec("n_events", "counts", "events in the prefix", ("S2", "S3"), BASELINE),
+    FeatureSpec("n_views", "counts", "view events in the prefix", ("S2", "S3"), BASELINE),
     FeatureSpec(
         "n_unique_products", "counts", "distinct product_id in the prefix",
         MODELLING_STAGES, BASELINE,
@@ -50,14 +52,12 @@ FEATURE_DICTIONARY: tuple[FeatureSpec, ...] = (
         "n_unique_categories", "counts", "distinct category_id in the prefix",
         MODELLING_STAGES, BASELINE,
     ),
-    FeatureSpec(
-        "n_cart_adds", "counts", "cart events in the prefix",
-        ("S3",), BASELINE,
-    ),
-    FeatureSpec(
-        "n_cart_removes", "counts", "remove_from_cart events in the prefix",
-        ("S3",), BASELINE,
-    ),
+    # NOTE (amendment A8): n_cart_adds, n_cart_removes and time_since_last_cart_s
+    # are deliberately absent. S3's cut-point is the *first* cart event, so its
+    # prefix contains exactly one cart event by construction: the counts are
+    # identically 1 and 0 and the recency is identically 0, in every session, on
+    # every dataset. Including them would feed three constants to the model and
+    # put three meaningless near-zero bars on the migration figure.
     # ---- Temporal (Sec. 8) ---------------------------------------------
     FeatureSpec(
         "prefix_duration_s", TEMPORAL, "last minus first event time in the prefix",
@@ -68,18 +68,14 @@ FEATURE_DICTIONARY: tuple[FeatureSpec, ...] = (
         MODELLING_STAGES, TEMPORAL,
     ),
     FeatureSpec(
-        "inter_event_std_s", TEMPORAL, "std of gaps between consecutive prefix events",
-        MODELLING_STAGES, TEMPORAL,
+        "inter_event_std_s", TEMPORAL,
+        "std of gaps between consecutive prefix events; needs >=2 gaps, so >=3 events, "
+        "which S1's two-interaction prefix never has",
+        ("S2", "S3"), TEMPORAL,
     ),
     FeatureSpec(
         "last_gap_s", TEMPORAL, "gap between the final two prefix events",
         MODELLING_STAGES, TEMPORAL,
-    ),
-    FeatureSpec(
-        "time_since_last_cart_s", TEMPORAL,
-        "seconds from the most recent cart event to the cut-point; undefined before "
-        "the first cart event, hence S3 only",
-        ("S3",), TEMPORAL,
     ),
     FeatureSpec("hour_of_day", TEMPORAL, "hour of the session's first event",
                 MODELLING_STAGES, TEMPORAL),
@@ -138,8 +134,9 @@ FEATURE_DICTIONARY: tuple[FeatureSpec, ...] = (
     FeatureSpec(
         "purchase_intent_score", COMPOSITE,
         "weighted sum of prefix view/cart/remove signals; weights in "
-        "prefix_features.INTENT_WEIGHTS, tested via ablation (H3)",
-        MODELLING_STAGES, COMPOSITE,
+        "prefix_features.INTENT_WEIGHTS, tested via ablation (H3). Excluded at S1, "
+        "where a fixed two-interaction prefix leaves it effectively constant",
+        ("S2", "S3"), COMPOSITE,
     ),
     # ---- Price context (available in REES46, not in the Sec. 5.1 ideal set)
     FeatureSpec(

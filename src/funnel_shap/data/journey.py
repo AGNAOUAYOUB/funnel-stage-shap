@@ -46,7 +46,8 @@ MODELLING_STAGES: tuple[StageName, ...] = ("S1", "S2", "S3")
 STAGE_DEFINITIONS: dict[StageName, str] = {
     "S1": "session entry -> initial catalogue contact; cut-point = second product "
           "interaction (amendment A6)",
-    "S2": "product/category browsing; cut-point = first repeat view or category switch",
+    "S2": "product/category browsing; cut-point = second repeat view or category switch "
+          "(amendment A8)",
     "S3": "cart activity begins; cut-point = first cart event",
     "S4": "checkout/purchase window; cut-point = purchase or session end",
 }
@@ -133,12 +134,23 @@ def stage_cutpoints(lazy: pl.LazyFrame, config: JourneyConfig | None = None) -> 
     else:
         category_switch = pl.lit(False)
 
+    # S2 opens on the *second* browsing signal, not the first (amendment A8).
+    # A single repeat view or category switch is incidental and, for most
+    # sessions, lands on the very same event as S1's cut-point -- which made 83%
+    # of S1 and S2 prefixes identical and the S1->S2 leg of the migration figure
+    # empty. Requiring two signals is the "consideration is established, not
+    # incidental" reading, and it separates the stages by construction: the
+    # earliest possible second signal is the third event.
+    browsing_signal = repeat_view | category_switch
+    browsing_ordinal = (
+        pl.when(browsing_signal).then(browsing_signal.cum_sum().over(s)).otherwise(None)
+    )
+
     per_session = (
         ordered.with_columns(
             _first_index_where(etype == "view", s).alias("_first_view"),
             _first_index_where(interaction_ordinal == 2, s).alias("_second_interaction"),
-            _first_index_where(repeat_view, s).alias("_first_repeat_view"),
-            _first_index_where(category_switch, s).alias("_first_cat_switch"),
+            _first_index_where(browsing_ordinal == 2, s).alias("_second_browsing_signal"),
             _first_index_where(etype == "cart", s).alias("_first_cart"),
             _first_index_where(etype == "purchase", s).alias("_first_purchase"),
         )
@@ -146,8 +158,7 @@ def stage_cutpoints(lazy: pl.LazyFrame, config: JourneyConfig | None = None) -> 
         .agg(
             pl.first("_first_view").alias("first_view"),
             pl.first("_second_interaction").alias("second_interaction"),
-            pl.first("_first_repeat_view").alias("first_repeat_view"),
-            pl.first("_first_cat_switch").alias("first_cat_switch"),
+            pl.first("_second_browsing_signal").alias("second_browsing_signal"),
             pl.first("_first_cart").alias("first_cart"),
             pl.first("_first_purchase").alias("first_purchase"),
             pl.first("session_n_events").alias("n_events"),
@@ -171,9 +182,7 @@ def stage_cutpoints(lazy: pl.LazyFrame, config: JourneyConfig | None = None) -> 
     # minimum that gives awareness a measurable dwell, inter-event gap and
     # category distribution.
     cut_s1 = pl.col("second_interaction")
-    # min_horizontal ignores nulls, which is what we want here: the earlier of
-    # whichever S2 trigger actually fired.
-    cut_s2 = pl.min_horizontal(pl.col("first_repeat_view"), pl.col("first_cat_switch"))
+    cut_s2 = pl.col("second_browsing_signal")
     cut_s3 = pl.col("first_cart")
     # S4 opens at the purchase (or session end) and is descriptive only.
     cut_s4 = pl.col("first_purchase").fill_null(pl.col("n_events") - 1)

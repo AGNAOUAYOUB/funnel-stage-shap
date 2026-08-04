@@ -98,9 +98,58 @@ Candidates considered: (1) cut at the second product interaction — **chosen**;
 as a time or event window; (3) drop S1 from the modelling set and report the curve over
 S2/S3 only.
 
-### A8. OPEN ISSUE — "cut at first X" destroys the signal each stage is named for (Sec. 7.3, 7.4)
+### A8. RESOLVED — degenerate stage features and S1/S2 collapse (Sec. 7.3, 7.4, 8)
 
-**Not a decision. A protocol question, surfaced by measuring A6's effect.**
+**Decision (2026-08-04, author approved fixing the issue; the mechanism below differs
+from what was originally proposed — see "Why the proposed fix was rejected").**
+
+Two changes, both keeping cut-points at the *first* occurrence of a trigger:
+
+1. **S2 opens on the second browsing signal**, not the first. Sec. 7.3's S2 row is amended
+   to "product/category browsing; cut-point = second repeat view or category switch".
+2. **The three cart-count features are removed from the dictionary entirely**
+   (`n_cart_adds`, `n_cart_removes`, `time_since_last_cart_s`), along with four features
+   that a fixed two-interaction S1 prefix cannot vary (`n_events`, `n_views`,
+   `inter_event_std_s`, `purchase_intent_score` at S1 only).
+
+**Effect, measured on the fixture.**
+
+| | before A8 | after A8 |
+|---|---|---|
+| Constant features at S1 | 4 of 23 | **0 of 19** |
+| Constant features at S3 | 3 of 26 | **0 of 23** |
+| S1→S2 sessions with identical cut-point | **82.8%** | **0%** |
+| S1→S2 mean extra events | 0.21 | 1.41 |
+| S2→S3 mean extra events | 5.48 | 4.87 |
+
+S2's reach rate falls from 97.7% to 84.8%, which is the intended consequence: sessions
+whose only browsing signal was incidental no longer count as having reached consideration.
+
+**Why the proposed fix was rejected.** The recommendation was to let each stage's prefix run
+*through* the stage, ending just before the next stage's trigger. Implementing it showed
+that it introduces an outcome-dependent truncation that is worse than the problem it solves.
+Under that scheme a prefix ends either at the next stage's trigger *or*, for sessions that
+end mid-stage, at session end. Whether truncation happens is then a function of the outcome:
+at S3, a purchasing session's prefix stops at the purchase while a non-purchasing session's
+runs to session end, so purchasers systematically get *shorter* prefixes. `n_events` and
+every duration feature would become predictive through the truncation rule rather than
+through behaviour — and would collect large SHAP mass at exactly the stage where the paper
+claims cart-proximity features dominate (H2). That is a spurious finding waiting to happen.
+
+Cutting at a stage's *opening* is the only future-independent choice available, so it is
+kept. The narrow real defects — degenerate features and colliding triggers — are fixed
+directly instead.
+
+**Residual issue for the Sec. 11.1 explanation layer.** At S1 the two-event prefix makes
+`prefix_duration_s`, `inter_event_mean_s`, `last_gap_s` and `dwell_total_s` numerically
+identical, with `click_velocity` and `events_per_active_minute` deterministic functions of
+them. They are not constant, so they pass the guard, but they are perfectly collinear.
+Sec. 11.1 already requires clustering correlated features and reporting grouped
+attributions; S1 is the stage where that requirement binds hardest, and the migration figure
+must use the grouped form there or the attribution will split arbitrarily across six
+redundant columns.
+
+**Original problem, retained for the record:**
 
 Sec. 7.4 says features use "the prefix of events up to Sk's cut-point", and Sec. 7.3 sets
 each cut-point at the *first* occurrence of the stage's trigger. Combining the two means a
@@ -124,27 +173,9 @@ cleanly distinct (0% identical, mean 5.5 extra events).
 migration figure: a migration trajectory is only interpretable between stages that are
 actually distinct.
 
-**Proposed resolution: prefixes run *through* a stage, not up to its opening.** Define Sk's
-prefix as all events from session entry to just before stage Sk+1's trigger fires:
-
-| Stage | Prefix spans |
-|---|---|
-| S1 | entry → just before the first repeat view / category switch |
-| S2 | entry → just before the first cart event |
-| S3 | entry → just before the purchase (all cart activity included) |
-
-This is arguably what Sec. 7.3's own table intends: its Definition column describes each
-stage as a *span* ("product/category browsing", "cart activity begins"), and a stage called
-Intent should contain the intent behaviour. Nesting still holds strictly, every stage becomes
-distinct by construction, cart-count and cart-recency features become informative at S3, and
-no prefix contains the purchase — so the Sec. 7.4 anti-leakage guarantee is unchanged.
-
-**Cost.** Amends Sec. 7.3/7.4 wording and shifts what each stage means, so RQ2's migration
-narrative is re-anchored. No leakage guarantee weakens.
-
-**Alternative.** Keep the current definition and report the S1→S2 leg as structurally
-degenerate, running the migration analysis over S2→S3 only. Cheaper, but it costs the paper
-a stage and leaves S3's cart features as dead weight.
+The resolution originally proposed here — prefixes running *through* each stage, ending
+just before the next stage's trigger — was implemented, measured, and rejected for the
+reason given above. The adopted fix keeps cut-points at stage openings.
 
 ### A9. Python 3.13 is present on the machine; the project pins 3.11 (Sec. 4)
 

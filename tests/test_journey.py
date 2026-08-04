@@ -146,35 +146,36 @@ def test_s1_is_unreached_when_only_one_interaction_precedes_purchase() -> None:
     assert cuts["cut_S1"][0] is None
 
 
-def test_s2_cuts_at_the_first_category_switch() -> None:
+def test_s2_cuts_at_the_second_browsing_signal() -> None:
+    """Amendment A8: one signal is incidental, two establish consideration."""
     lazy = _log(
         [
             ("2019-10-01 00:00:00", "view", 1, 1),
-            ("2019-10-01 00:00:30", "view", 2, 1),
-            ("2019-10-01 00:01:00", "view", 3, 2),  # category switch
+            ("2019-10-01 00:00:30", "view", 2, 2),  # signal 1: category switch
+            ("2019-10-01 00:01:00", "view", 3, 3),  # signal 2: category switch
         ]
     )
     cuts = stage_cutpoints(lazy)
     assert cuts["cut_S2"][0] == 2
 
 
-def test_s2_cuts_at_the_first_repeat_view() -> None:
+def test_repeat_views_and_switches_both_count_as_signals() -> None:
     lazy = _log(
         [
             ("2019-10-01 00:00:00", "view", 1, 1),
-            ("2019-10-01 00:00:30", "view", 2, 1),
-            ("2019-10-01 00:01:00", "view", 1, 1),  # repeat of product 1
+            ("2019-10-01 00:00:30", "view", 2, 2),  # signal 1: category switch
+            ("2019-10-01 00:01:00", "view", 2, 2),  # signal 2: repeat of product 2
         ]
     )
     cuts = stage_cutpoints(lazy)
     assert cuts["cut_S2"][0] == 2
 
 
-def test_s2_is_null_when_the_session_only_browses_once() -> None:
+def test_s2_is_null_on_a_single_browsing_signal() -> None:
     lazy = _log(
         [
             ("2019-10-01 00:00:00", "view", 1, 1),
-            ("2019-10-01 00:00:30", "view", 2, 1),
+            ("2019-10-01 00:00:30", "view", 2, 2),  # one signal only
         ]
     )
     cuts = stage_cutpoints(lazy)
@@ -235,19 +236,23 @@ def test_deeper_stages_have_higher_prevalence(cutpoints) -> None:
     assert prevalence["S3"] > prevalence["S1"]
 
 
-def test_distinctness_table_reports_stage_collapse(cutpoints) -> None:
-    """Amendment A8: the S1->S2 leg of the migration figure is mostly degenerate."""
+def test_every_stage_pair_is_distinct(cutpoints) -> None:
+    """The guard on the centrepiece figure (amendment A8).
+
+    A migration trajectory between two stages that share a cut-point is not a
+    finding, it is the same model twice. Before A8, 82.8% of S1/S2 pairs were
+    identical; requiring a second browsing signal separates them by
+    construction, since the earliest possible second signal is the third event.
+    """
     from funnel_shap.data.journey import stage_distinctness_table
 
     table = stage_distinctness_table(cutpoints)
     rows = {r["pair"]: r for r in table.to_dicts()}
 
     assert set(rows) == {"S1->S2", "S2->S3"}
-    # S2->S3 is cleanly separated; S1->S2 is not. If a future change to the
-    # cut-point definitions fixes this, the assertion below should be tightened
-    # rather than deleted -- it is the guard on the centrepiece figure.
-    assert rows["S2->S3"]["share_identical"] == 0.0
-    assert rows["S1->S2"]["share_identical"] > 0.5
+    for pair, row in rows.items():
+        assert row["share_identical"] == 0.0, f"{pair} prefixes collapse"
+        assert row["mean_extra_events"] > 0, f"{pair} carries no additional events"
 
 
 def test_ordering_is_deterministic_under_timestamp_collisions() -> None:
