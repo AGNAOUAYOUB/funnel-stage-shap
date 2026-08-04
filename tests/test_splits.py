@@ -164,3 +164,74 @@ def test_load_split_roundtrips(sessionised, cutpoints, tmp_path) -> None:
 def test_load_missing_split_is_an_error(tmp_path) -> None:
     with pytest.raises(FileNotFoundError, match="freeze-splits"):
         load_split("nope", "temporal", directory=tmp_path)
+
+
+# ---------------------------------------------------------------------------
+# Dataset A (amendment A12)
+# ---------------------------------------------------------------------------
+
+
+def _fake_dataset_a() -> pl.DataFrame:
+    """Months in the real file's proportions, including the empty-val trap."""
+    sizes = {
+        "Feb": 184, "Mar": 1907, "May": 3364, "June": 288, "Jul": 432,
+        "Aug": 433, "Sep": 448, "Oct": 549, "Nov": 2998, "Dec": 1727,
+    }
+    months, revenue = [], []
+    for i, (month, n) in enumerate(sizes.items()):
+        months += [month] * n
+        # Rising prevalence, as in the real data.
+        positives = int(n * (0.02 + 0.02 * i))
+        revenue += ["TRUE"] * positives + ["FALSE"] * (n - positives)
+    return pl.DataFrame({"Month": months, "Revenue": revenue})
+
+
+def test_dataset_a_split_has_three_non_empty_partitions() -> None:
+    """Row-count boundaries put both marks inside November and emptied val."""
+    from funnel_shap.data.splits import dataset_a_split
+
+    assigned, report = dataset_a_split(_fake_dataset_a())
+    assert report.n_train > 0 and report.n_val > 0 and report.n_test > 0
+    assert set(assigned["partition"].unique()) == {"train", "val", "test"}
+
+
+def test_dataset_a_split_never_straddles_a_month() -> None:
+    """A month in two partitions means the held-out period is not held out."""
+    from funnel_shap.data.splits import dataset_a_split
+
+    assigned, _ = dataset_a_split(_fake_dataset_a())
+    per_month = assigned.group_by("Month").agg(
+        pl.col("partition").n_unique().alias("n_partitions")
+    )
+    assert per_month["n_partitions"].max() == 1
+
+
+def test_dataset_a_split_is_time_ordered() -> None:
+    from funnel_shap.data.splits import DATASET_A_MONTH_ORDER, dataset_a_split
+
+    order = {m: i for i, m in enumerate(DATASET_A_MONTH_ORDER)}
+    assigned, _ = dataset_a_split(_fake_dataset_a())
+
+    def months(name: str) -> set[int]:
+        sub = assigned.filter(pl.col("partition") == name)
+        return {order[m] for m in sub["Month"].unique().to_list()}
+
+    assert max(months("train")) < min(months("val"))
+    assert max(months("val")) < min(months("test"))
+
+
+def test_dataset_a_split_is_deterministic() -> None:
+    from funnel_shap.data.splits import dataset_a_split
+
+    frame = _fake_dataset_a()
+    a, _ = dataset_a_split(frame)
+    b, _ = dataset_a_split(frame)
+    assert a.equals(b)
+
+
+def test_dataset_a_rejects_unknown_months() -> None:
+    from funnel_shap.data.splits import dataset_a_split
+
+    frame = pl.DataFrame({"Month": ["Jan"] * 10, "Revenue": ["TRUE"] * 10})
+    with pytest.raises(SplitError, match="unexpected Month"):
+        dataset_a_split(frame)

@@ -211,6 +211,50 @@ ordered in time *and* identity-clean. The grouped split remains as the separate 
 arm Sec. 7.6 asks for. The cost is the dropped straddling band, which is reported rather
 than hidden.
 
+### A12. Dataset A is split by month, and it drifts hard (Sec. 5.2, 7.6, 9.6, 10)
+
+**Decision.** Dataset A uses a month-ordered split: train = Feb–Oct (7,605), val = Nov
+(2,998), test = Dec (1,727). Boundaries are chosen by exhaustive search over the ten months
+present for the pair whose cumulative shares come closest to 70/15/15.
+
+**Why not the Sec. 7.6 protocols.** Neither transfers. Dataset A has no `user_id`, so a
+grouped split is undefined, and no timestamp finer than a month *name* (no year, no day, no
+clock), so a true temporal cut is impossible. Sec. 7.6 nonetheless forbids a naive random
+split, correctly: sessions in the same month share promotions, stock and seasonality.
+
+**The achievable split is not 70/15/15.** Month sizes are wildly uneven — May (3,364) and
+November (2,998) are 52% of the file between them, while February is 184 sessions. The
+closest month-boundary split is 61.7 / 24.3 / 14.0. Row-count boundaries were tried first
+and produced an *empty validation partition*, because both the 70% and 85% marks land
+inside November.
+
+**The finding that matters: conversion prevalence drifts by 15x across the file.**
+
+| Feb | Mar | May | June | Jul | Aug | Sep | Oct | Nov | Dec |
+|---|---|---|---|---|---|---|---|---|---|
+| 1.6% | 10.1% | 10.9% | 10.1% | 15.3% | 17.6% | 19.2% | 20.9% | 25.4% | 12.5% |
+
+Prevalence rises almost monotonically from February to November, then halves in December.
+Two consequences:
+
+1. **Most published results on this benchmark use a random split**, which mixes these months
+   and hides the drift. Reporting a month-ordered result alongside is a genuine, cheap
+   contribution — and it means our Dataset A numbers will look *worse* than the literature's
+   for a good reason that must be stated plainly, not buried.
+2. **Calibration and threshold selection are compromised as currently specified.** Sec. 9.6
+   calibrates on a held-out split and Sec. 10 fixes the threshold before test. Doing either
+   on November (25.4% prevalence) and then evaluating on December (12.5%) would
+   systematically over-predict — the calibration curve would be fitted to roughly double the
+   base rate it is applied to.
+
+**Open question for the modelling phase.** Options: (a) accept it and report the prevalence
+shift with prevalence-corrected calibration; (b) move the boundary so validation is more
+representative, at the cost of a smaller or oddly-shaped test period; (c) calibrate on a
+month-stratified subsample of the training period rather than on the validation month.
+Recommend (a) plus reporting the shift explicitly — it is an honest property of the data,
+and hiding it by re-cutting until the partitions match would be exactly the kind of
+post-hoc tuning the protocol freeze exists to prevent.
+
 ### A9. Python 3.13 is present on the machine; the project pins 3.11 (Sec. 4)
 
 **Decision.** The project venv is CPython 3.11.15, provisioned by `uv`, independent of the

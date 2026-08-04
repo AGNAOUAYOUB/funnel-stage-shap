@@ -301,6 +301,136 @@ def freeze_splits(
     return reports
 
 
+#: Dataset A's Month column, in calendar order. The UCI file has no year, no
+#: day and no clock time, and it is missing January and April entirely.
+DATASET_A_MONTH_ORDER: tuple[str, ...] = (
+    "Feb", "Mar", "May", "June", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+)
+
+
+def dataset_a_split(
+    frame: pl.DataFrame,
+    *,
+    ratios: tuple[float, float, float] = DEFAULT_RATIOS,
+    seed: int = 42,
+) -> tuple[pl.DataFrame, SplitReport]:
+    """Month-ordered split for the static benchmark (Sec. 5.2, 7.6).
+
+    Neither protocol in Sec. 7.6 transfers to Dataset A: it has no `user_id`, so
+    a grouped split is undefined, and no timestamp finer than a month name, so a
+    true temporal cut is impossible. Sec. 7.6 nevertheless forbids a naive
+    random split, and it is right to — sessions from the same month share
+    promotions, stock and seasonality, so a random cut would let the model see
+    each month's conditions during training and score them again at test.
+
+    Ordering by month and cutting on that boundary is the closest honest
+    analogue: later months are held out from earlier ones. Two caveats belong in
+    the paper. The month column carries no year, so if the 12,330 sessions span
+    more than one year the ordering is approximate. And month sizes are very
+    uneven (November alone is a large share), so partition sizes will not land
+    near 70/15/15 — the report records what they actually are.
+
+    `seed` is accepted for interface symmetry and is unused: the split is
+    deterministic given the month ordering.
+    """
+    _validate_ratios(ratios)
+
+    if "Month" not in frame.columns:
+        raise SplitError("Dataset A frame has no Month column")
+
+    order = {month: i for i, month in enumerate(DATASET_A_MONTH_ORDER)}
+    unknown = set(frame["Month"].unique().to_list()) - set(order)
+    if unknown:
+        raise SplitError(
+            f"unexpected Month values {sorted(unknown)}; DATASET_A_MONTH_ORDER needs updating"
+        )
+
+    from .dataset_a import _to_bool_int
+
+    table = (
+        frame.with_row_index("session_id")
+        .with_columns(
+            pl.col("Month").replace_strict(order, return_dtype=pl.Int32).alias("_month_idx"),
+            _to_bool_int(frame["Revenue"]).cast(pl.Boolean).alias("label"),
+        )
+        .sort("_month_idx", "session_id")
+        .with_columns(pl.lit(-1).alias("user_id"))
+    )
+
+    # Cut on month boundaries, not row counts: a month must not straddle
+    # partitions or the held-out period is not really held out. The months are
+    # very unevenly sized (May and November are ~52% of the file between them),
+    # so no pair of boundaries hits 70/15/15 -- pick the pair that comes closest
+    # while leaving val and test non-empty.
+    train_month, val_month = _best_month_boundaries(table, ratios)
+
+    assigned = table.with_columns(
+        pl.when(pl.col("_month_idx") < train_month)
+        .then(pl.lit("train"))
+        .when(pl.col("_month_idx") < val_month)
+        .then(pl.lit("val"))
+        .otherwise(pl.lit("test"))
+        .alias("partition")
+    ).with_columns(pl.col("session_id").cast(pl.Utf8))
+
+    inv = {i: m for m, i in order.items()}
+    return assigned, _report(
+        assigned,
+        protocol="dataset_a_month",
+        seed=None,
+        ratios=ratios,
+        n_users=table.height,
+        n_straddling=0,
+        boundary_train_val=inv.get(train_month),
+        boundary_val_test=inv.get(val_month),
+    )
+
+
+def _best_month_boundaries(
+    table: pl.DataFrame, ratios: tuple[float, float, float]
+) -> tuple[int, int]:
+    """Month indices (train_end, val_end) whose cumulative shares best match ``ratios``.
+
+    Exhaustive over the at most 10 months present, so the choice is deterministic
+    and auditable rather than the accident of where a row-count boundary lands.
+    Returns indices such that train = months < train_end, val = months in
+    [train_end, val_end), test = months >= val_end.
+    """
+    counts = (
+        table.group_by("_month_idx").agg(pl.len().alias("n")).sort("_month_idx")
+    )
+    months = counts["_month_idx"].to_list()
+    sizes = counts["n"].to_list()
+    total = sum(sizes)
+
+    cumulative: dict[int, float] = {}
+    running = 0
+    for month, size in zip(months, sizes, strict=True):
+        running += size
+        cumulative[month] = running / total
+
+    target_train = ratios[0]
+    target_train_val = ratios[0] + ratios[1]
+
+    best: tuple[float, int, int] | None = None
+    # i indexes the first val month, j the first test month.
+    for i in range(1, len(months)):
+        for j in range(i + 1, len(months)):
+            share_train = cumulative[months[i - 1]]
+            share_train_val = cumulative[months[j - 1]]
+            cost = (share_train - target_train) ** 2 + (
+                share_train_val - target_train_val
+            ) ** 2
+            if best is None or cost < best[0]:
+                best = (cost, months[i], months[j])
+
+    if best is None:
+        raise SplitError(
+            f"need at least 3 distinct months to split, found {len(months)}"
+        )
+    return best[1], best[2]
+
+
 def load_split(suffix: str, protocol: Protocol, *, directory: Path = SPLITS) -> pl.DataFrame:
     """Read a frozen split. The only sanctioned way to learn which rows are test."""
     target = directory / f"split_{suffix}_{protocol}.parquet"
