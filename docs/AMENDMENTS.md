@@ -71,7 +71,45 @@ and ~15% prevalence exactly.
 submission:** re-fetch from the canonical UCI endpoint via `funnel-shap fetch-a` and confirm
 the hash, so provenance does not rest on a working copy of unknown history.
 
-### A6. Python 3.13 is present on the machine; the project pins 3.11 (Sec. 4)
+### A6. OPEN ISSUE — S1 as defined yields a one-event prefix (Sec. 7.3, RQ1, H1)
+
+**Not a decision. A protocol question that needs answering before freeze.**
+
+Sec. 7.3 defines S1 as "session entry → first product interaction" with cut-point "first
+view". Sessions in an event log almost always *open* with a view, so `cut_S1 = 0` and the
+S1 prefix is a single event. Measured on the synthetic fixture: mean S1 prefix length is
+exactly 1.0 event, and **19 of 23 S1 features are constant across all sessions** — every
+count, duration, gap, entropy, velocity and transition feature is degenerate because a
+one-event prefix has no second event to measure against.
+
+The only features that vary at S1 are `hour_of_day`, `is_weekend`, `price_mean` and
+`price_max` — i.e. time-of-day plus the price of the single product viewed.
+
+This is not an implementation artefact; it follows directly from the stated cut-point. Its
+consequences:
+
+- **RQ1/H1** would compare a near-null S1 model against genuine S2/S3 models. The
+  improvement curve would be dominated by S1 having almost no features, not by the journey
+  becoming more predictive.
+- **RQ2/H2** — "attribution mass migrates from context to behaviour" — is close to
+  guaranteed at S1 by construction, since only context features are non-constant there.
+  Confirming H2 on this definition would be circular.
+
+Three candidate resolutions, in order of preference:
+
+1. **Redefine S1's cut-point as the first *repeat or second* product interaction** — i.e.
+   awareness spans entry through the visitor's first engagement signal, not the entry event
+   itself. Keeps four honest stages and gives S1 real features.
+2. **Define S1 by elapsed time or event budget** (e.g. the first 60 seconds, or first 3
+   events), making awareness a window rather than a single instant.
+3. **Drop S1 from the modelling set** and report the curve over S2/S3 only, stating that
+   awareness carries no behavioural signal by construction.
+
+Option 1 or 2 requires a Sec. 7.3 amendment before freeze; option 3 requires amending
+Sec. 9.2 and H1. Deciding this *after* seeing test-set results would not be defensible, so
+it must be settled now.
+
+### A7. Python 3.13 is present on the machine; the project pins 3.11 (Sec. 4)
 
 **Decision.** The project venv is CPython 3.11.15, provisioned by `uv`, independent of the
 system 3.13.
