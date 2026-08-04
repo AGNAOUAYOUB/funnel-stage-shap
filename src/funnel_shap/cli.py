@@ -144,6 +144,51 @@ def build_features(suffix: str = _SUFFIX_OPT) -> None:
 
 
 @app.command()
+def prepare_b(source: Path, overwrite: bool = False) -> None:
+    """Convert a Dataset-B month (.csv or .csv.gz) to Parquet and register provenance."""
+    from .data.ingest import convert_dataset_b_to_parquet, register_dataset_b
+
+    typer.echo(f"converting {source.name} ...")
+    dest = convert_dataset_b_to_parquet(source, overwrite=overwrite)
+    size_gb = dest.stat().st_size / 1024**3
+    typer.echo(f"parquet -> {dest} ({size_gb:.2f} GB)")
+
+    prov = register_dataset_b(dest)
+    typer.echo(f"registered {prov.n_rows:,} events, sha256={prov.sha256[:16]}...")
+
+
+@app.command("freeze-splits")
+def freeze_splits_cmd(
+    suffix: str = _SUFFIX_OPT,
+    seed: int = 42,
+    overwrite: bool = False,
+) -> None:
+    """Freeze the temporal and grouped splits to disk (Sec. 7.6, run-sheet step 6)."""
+    paths.ensure_dirs()
+
+    from .data.splits import freeze_splits
+
+    sessions = pl.read_parquet(paths.INTERIM / f"sessions_{suffix}.parquet")
+    cuts = pl.read_parquet(paths.INTERIM / f"cutpoints_{suffix}.parquet")
+
+    reports = freeze_splits(
+        sessions, cuts, suffix=suffix, seed=seed, overwrite=overwrite
+    )
+    for protocol, report in reports.items():
+        typer.echo(report.summary())
+        if protocol == "temporal":
+            typer.echo(
+                f"  boundary val/test: {report.boundary_val_test}   "
+                f"straddling users dropped: {report.n_straddling_users:,}"
+            )
+    typer.secho(
+        "Splits are frozen. Every model and explanation must read them; "
+        "the test partition opens exactly once, at final evaluation.",
+        fg=typer.colors.YELLOW,
+    )
+
+
+@app.command()
 def check_config(path: Path) -> None:
     """Validate a run YAML against the protocol schema (Appendix A)."""
     config = load_config(path)

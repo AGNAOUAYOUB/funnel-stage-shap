@@ -33,40 +33,68 @@ which predictor is better.
 | | |
 |---|---|
 | Role | Event-level primary; genuine journey reconstruction, stage-migration attribution, TimeSHAP arm (Sec. 5.3) |
-| Source | Kaggle: "eCommerce behavior data from a multi-category store" (REES46) |
-| Scale | millions of raw events; ≥52k sessions after sessionisation and filtering |
-| Licence | **NOT YET CONFIRMED** |
-| Status | **Not present.** Must be downloaded manually. |
+| Source | `https://data.rees46.com/datasets/marketplace/2019-Oct.csv.gz` — REES46's own open endpoint |
+| Window | October 2019, one month, as Sec. 5.3 permits ("subsample a fixed window/month for tractability, documented and seeded") |
+| Size | 1,741,928,540 bytes compressed |
+| SHA-256 | `8ebca1ad741295297368f2cf0315e3f36853a1a11768fb16babf8c9b83838147` |
+| Retrieved | 2026-08-04 |
+| Licence | **See the licence finding below — unresolved, action required** |
+| Status | **Present** in `data/raw/rees46/` |
 
-### Why it is not auto-downloaded
+Columns as delivered, matching the Sec. 5.3 spec exactly: `event_time`, `event_type` ∈
+{view, cart, remove_from_cart, purchase}, `product_id`, `category_id`, `category_code`,
+`brand`, `price`, `user_id`, `user_session`.
 
-Two reasons, both from Sec. 5.3. The archive is multi-gigabyte and sits behind Kaggle's
-authenticated API; and the protocol requires the licence to be *confirmed as permitting
-research publication and recorded* before the data is used. That confirmation is a human
-judgement, so the pipeline will not make it silently.
+### Why not Kaggle
 
-### To supply it
+Sec. 5.3 names the Kaggle mirror "or an equivalent open event log". The Kaggle copy sits
+behind an authenticated API and no credentials exist on this machine. REES46 publishes the
+identical monthly files from their own domain with no authentication, which is a *better*
+provenance chain than a third-party mirror: it is the originating publisher. A Hugging Face
+mirror also exists but was not used, for the same reason.
 
-1. Download the monthly CSVs from Kaggle into `data/raw/rees46/`.
-2. Subsample a fixed window (protocol: one documented, seeded month) for tractability.
-3. Register provenance and validate the schema:
+### Licence finding — needs your decision before submission
+
+Sec. 5.3 requires the licence to be confirmed as permitting research publication and
+recorded. It could not be confirmed, and the evidence points in two directions:
+
+- The **Kaggle metadata field states "Data files © Original Authors"** — that is a
+  reservation of rights, not a grant. It does not, on its face, permit redistribution or
+  publication.
+- **REES46 publishes them as "Free datasets with eCommerce behavior data ... for your
+  neural network"**, serves them openly without a click-through, and links an IEEE paper
+  built on these datasets from the same page. Intent and precedent clearly point to
+  academic use being welcome.
+
+No formal licence text (CC BY, ODbL, or similar) is stated anywhere I could find. "Freely
+downloadable and widely used in published work" is not the same as "licensed for
+publication", and a Q1 reviewer or a journal's data-availability check may ask.
+
+**Recommended action:** email REES46 for written confirmation that academic use and
+publication are permitted, and record the reply verbatim in `provenance_B.json`. Until
+then, cite the dataset as REES46 / Michael Kechinov and state the position honestly in the
+data-availability statement rather than asserting a licence that is not documented.
+
+### Reproducing the download
 
 ```bash
-.venv/Scripts/python.exe -m funnel_shap.cli register-b data/raw/rees46/2019-Oct.csv
+curl -L -o data/raw/rees46/2019-Oct.csv.gz https://data.rees46.com/datasets/marketplace/2019-Oct.csv.gz
 ```
 
-4. Replace the licence placeholder in `provenance_B.json` with the verbatim Kaggle terms.
+Then convert to Parquet and register provenance. Polars' lazy CSV scan cannot stream a
+gzip member, and decompressing the month to plain CSV costs several times the disk that
+Parquet does, so the conversion happens once up front:
 
-Expected columns: `event_time`, `event_type` ∈ {view, cart, remove_from_cart, purchase},
-`product_id`, `category_id`, `category_code`, `brand`, `price`, `user_id`, `user_session`.
+```bash
+.venv/Scripts/python.exe -m funnel_shap.cli prepare-b data/raw/rees46/2019-Oct.csv.gz
+```
 
-### Until then
+### The synthetic fixture
 
-The pipeline is exercisable on a synthetic fixture with the same schema
-(`funnel_shap.data.synthetic`), used by the test suite and by
-`funnel-shap sessionize --synthetic`. **No result in the paper may come from it.** It
-exists so the leakage invariants and feature definitions could be pinned before the real
-data arrived.
+`funnel_shap.data.synthetic` generates an event log with the same schema, used by the test
+suite and by `funnel-shap sessionize --synthetic`. It exists so the leakage invariants and
+feature definitions could be pinned before the real data arrived, and it remains the
+fixture for CI. **No result in the paper may come from it.**
 
 ## Variable availability (Sec. 5.1)
 

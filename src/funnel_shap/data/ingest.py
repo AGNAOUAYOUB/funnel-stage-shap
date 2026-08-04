@@ -40,9 +40,25 @@ DATASET_A_CITATION = (
 )
 DATASET_A_LICENCE = "CC BY 4.0 (UCI Machine Learning Repository)"
 
+#: REES46's own open endpoint. Preferred over the Kaggle mirror named first in
+#: Sec. 5.3, which requires API credentials: this is the originating publisher,
+#: so the provenance chain is shorter.
+DATASET_B_URL_TEMPLATE = "https://data.rees46.com/datasets/marketplace/{month}.csv.gz"
+DATASET_B_SOURCE = "REES46 open datasets (https://data.rees46.com/datasets/marketplace/)"
 DATASET_B_CITATION = (
-    "REES46 Marketing Platform. eCommerce behavior data from a multi-category store. "
-    "Published via Kaggle."
+    "REES46 Marketing Platform (M. Kechinov). eCommerce behavior data from a "
+    "multi-category store. https://rees46.com/en/datasets"
+)
+#: Sec. 5.3 requires the licence to be confirmed as permitting research publication.
+#: It could not be: Kaggle's metadata field reserves rights ("Data files (c) Original
+#: Authors") while REES46 publishes the files as free and links academic work built on
+#: them. No formal licence text exists. See the licence finding in data/raw/DATASETS.md.
+DATASET_B_LICENCE = (
+    "UNRESOLVED. Kaggle metadata states 'Data files (c) Original Authors' (a reservation "
+    "of rights, not a grant); REES46 publishes them as 'free datasets' with no formal "
+    "licence text and links an IEEE paper built on them. Obtain written confirmation from "
+    "REES46 that academic use and publication are permitted, and replace this string with "
+    "the reply verbatim before submission (Sec. 5.3)."
 )
 
 
@@ -167,34 +183,114 @@ def register_dataset_b(source: Path, *, dest_dir: Path = DATASET_B_RAW) -> Prove
     if not source.exists():
         raise FileNotFoundError(source)
 
-    columns = pl.scan_csv(source).collect_schema().names()
-    validate_event_columns(columns)
-    n_rows = pl.scan_csv(source).select(pl.len()).collect().item()
+    lazy = pl.scan_parquet(source) if source.suffix == ".parquet" else pl.scan_csv(source)
+    validate_event_columns(lazy.collect_schema().names())
+    n_rows = lazy.select(pl.len()).collect().item()
 
     prov = Provenance(
         dataset="B",
         filename=str(source),
-        source="Kaggle: eCommerce behavior data from a multi-category store (REES46)",
+        source=DATASET_B_SOURCE,
         sha256=sha256_of(source),
         n_rows=int(n_rows),
         n_bytes=source.stat().st_size,
         retrieved_utc=_now(),
-        licence="CONFIRM BEFORE PUBLICATION -- Sec. 5.3 requires the Kaggle licence "
-        "to be checked and recorded verbatim here.",
+        licence=DATASET_B_LICENCE,
         citation=DATASET_B_CITATION,
     )
     prov.write(dest_dir)
     return prov
 
 
-def scan_dataset_b(pattern: str | Path = None) -> pl.LazyFrame:
+def convert_dataset_b_to_parquet(
+    source: Path,
+    *,
+    dest: Path | None = None,
+    chunk_rows: int = 2_000_000,
+    overwrite: bool = False,
+) -> Path:
+    """Stream a (possibly gzipped) event CSV into Parquet.
+
+    Polars' lazy CSV scan cannot stream a gzip member, and decompressing the
+    month to plain CSV costs several times the disk of the Parquet it would
+    become. Converting once up front keeps the Sec. 4.1 requirement (lazy
+    Polars for sessionisation) satisfiable via `scan_parquet`, and makes every
+    subsequent pass over the log dramatically cheaper.
+
+    The read is chunked so peak memory stays bounded regardless of month size.
+    """
+    import gzip
+
+    import pyarrow as pa
+    import pyarrow.csv as pacsv
+    import pyarrow.parquet as pq
+
+    source = Path(source)
+    if dest is None:
+        name = source.name.removesuffix(".gz").removesuffix(".csv")
+        dest = source.with_name(f"{name}.parquet")
+    if dest.exists() and not overwrite:
+        return dest
+
+    opener = gzip.open if source.suffix == ".gz" else open
+    writer: pq.ParquetWriter | None = None
+    n_rows = 0
+
+    try:
+        with opener(source, "rb") as raw:
+            reader = pacsv.open_csv(
+                raw,
+                read_options=pacsv.ReadOptions(block_size=1 << 24),
+                convert_options=pacsv.ConvertOptions(
+                    # event_time keeps its trailing " UTC"; sessionize.parse_event_time
+                    # handles it, and letting Arrow guess produces nulls instead.
+                    column_types={"event_time": pa.string()}
+                ),
+            )
+            validate_event_columns(reader.schema.names)
+
+            batch_buffer: list[pa.RecordBatch] = []
+            buffered = 0
+            for batch in reader:
+                batch_buffer.append(batch)
+                buffered += batch.num_rows
+                if buffered >= chunk_rows:
+                    table = pa.Table.from_batches(batch_buffer)
+                    if writer is None:
+                        writer = pq.ParquetWriter(dest, table.schema, compression="zstd")
+                    writer.write_table(table)
+                    n_rows += buffered
+                    batch_buffer, buffered = [], 0
+
+            if batch_buffer:
+                table = pa.Table.from_batches(batch_buffer)
+                if writer is None:
+                    writer = pq.ParquetWriter(dest, table.schema, compression="zstd")
+                writer.write_table(table)
+                n_rows += buffered
+    finally:
+        if writer is not None:
+            writer.close()
+
+    if n_rows == 0:
+        dest.unlink(missing_ok=True)
+        raise SchemaError(f"{source} produced no rows")
+
+    return dest
+
+
+def scan_dataset_b(pattern: str | Path | None = None) -> pl.LazyFrame:
     """Lazily scan the Dataset-B event files (Sec. 4.1: Polars lazy API).
 
-    Returns a LazyFrame so sessionisation over millions of events stays
+    Prefers the Parquet conversion when present, falling back to CSV. Returns a
+    LazyFrame so sessionisation over hundreds of millions of events stays
     memory-bound rather than loading the whole log.
     """
     if pattern is None:
-        pattern = DATASET_B_RAW / "*.csv"
-    lazy = pl.scan_csv(pattern, try_parse_dates=False)
+        parquet = sorted(DATASET_B_RAW.glob("*.parquet"))
+        pattern = DATASET_B_RAW / "*.parquet" if parquet else DATASET_B_RAW / "*.csv"
+
+    text = str(pattern)
+    lazy = pl.scan_parquet(pattern) if text.endswith(".parquet") else pl.scan_csv(pattern)
     validate_event_columns(lazy.collect_schema().names())
     return lazy

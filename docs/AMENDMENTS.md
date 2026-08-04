@@ -177,6 +177,40 @@ The resolution originally proposed here — prefixes running *through* each stag
 just before the next stage's trigger — was implemented, measured, and rejected for the
 reason given above. The adopted fix keeps cut-points at stage openings.
 
+### A10. Dataset B sourced from REES46 directly, not Kaggle (Sec. 5.3)
+
+**Decision.** `data/raw/rees46/2019-Oct.csv.gz` was downloaded from
+`https://data.rees46.com/datasets/marketplace/2019-Oct.csv.gz`, REES46's own open endpoint,
+rather than the Kaggle mirror Sec. 5.3 names first. October 2019, one month, per Sec. 5.3's
+allowance to "subsample a fixed window/month for tractability". SHA-256 recorded in
+`DATASETS.md` and `provenance_B.json`.
+
+**Why.** Sec. 5.3 permits "an equivalent open event log". The Kaggle copy requires API
+credentials that do not exist on this machine; REES46 serves the identical files without
+authentication. Taking them from the originating publisher is a stronger provenance chain
+than a third-party mirror, not a weaker one.
+
+**Unresolved: the licence.** Sec. 5.3 requires confirming the licence permits research
+publication. It could not be confirmed. Kaggle's metadata field says "Data files © Original
+Authors" — a reservation of rights, not a grant — while REES46 publishes the files as "free
+datasets ... for your neural network" and links an IEEE paper built on them. No formal
+licence text exists anywhere I could find. Written confirmation from REES46 should be
+obtained and recorded before submission; see the licence finding in `DATASETS.md`.
+
+### A11. The temporal split is grouped by user as well (Sec. 7.6)
+
+**Decision.** The temporal split assigns each *user* to a period by their first session and
+cuts on that, rather than cutting sessions on a date alone. Users whose activity straddles a
+boundary are dropped and counted in the split report.
+
+**Why.** Sec. 7.6 presents temporal and grouped as alternative protocols, with temporal as
+the headline. But a purely date-based cut still lets a returning visitor appear on both
+sides of the boundary — exactly the identity leakage the grouped protocol exists to prevent.
+Rather than pick which leak to accept in the headline result, the temporal split is both:
+ordered in time *and* identity-clean. The grouped split remains as the separate robustness
+arm Sec. 7.6 asks for. The cost is the dropped straddling band, which is reported rather
+than hidden.
+
 ### A9. Python 3.13 is present on the machine; the project pins 3.11 (Sec. 4)
 
 **Decision.** The project venv is CPython 3.11.15, provisioned by `uv`, independent of the
