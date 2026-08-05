@@ -6,6 +6,8 @@ runs through here so it is scripted, seeded, and DVC-trackable.
 
 from __future__ import annotations
 
+import contextlib
+import sys
 from pathlib import Path
 
 import polars as pl
@@ -13,6 +15,13 @@ import typer
 
 from . import paths
 from .config import load_config
+
+# Polars renders tables with box-drawing characters, which a Windows console
+# defaulting to cp1252 cannot encode -- the run completes and then dies on the
+# print. Reconfiguring stdout is cheaper than stripping the output.
+for _stream in (sys.stdout, sys.stderr):
+    with contextlib.suppress(AttributeError, ValueError):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
 
 app = typer.Typer(add_completion=False, help="Funnel-Stage SHAP pipeline")
 
@@ -76,11 +85,21 @@ _SYNTHETIC_OPT = typer.Option(
 _SUFFIX_OPT = typer.Option("synthetic", help="Which sessionised artefact to read")
 
 
+_SAMPLE_OPT = typer.Option(
+    0, help="Keep only N users (0 = all). Seeded; Sec. 5.3 permits this for tractability."
+)
+_REUSE_OPT = typer.Option(
+    False, help="Reuse an existing sessions_<suffix>.parquet instead of re-sessionising"
+)
+
+
 @app.command()
 def sessionize(
     source: Path = _SOURCE_OPT,
     gap_minutes: int = 30,
     synthetic: bool = _SYNTHETIC_OPT,
+    sample_users: int = _SAMPLE_OPT,
+    reuse_sessions: bool = _REUSE_OPT,
 ) -> None:
     """Clean and sessionise the event stream (Sec. 7.1-7.2)."""
     paths.ensure_dirs()
@@ -90,24 +109,38 @@ def sessionize(
     from .data.journey import stage_cutpoints, stage_prevalence_table
     from .data.sessionize import SessionizeConfig
     from .data.sessionize import sessionize as run_sessionize
+    from .data.subsample import subsample_users
     from .data.synthetic import make_event_log
 
-    if synthetic:
-        lazy = make_event_log(n_users=500, seed=42).lazy()
-        label = f"synthetic (gap={gap_minutes}min)"
-    else:
-        lazy = scan_dataset_b(source)
-        label = f"Dataset B (gap={gap_minutes}min)"
-
+    base_suffix = "synthetic" if synthetic else f"gap{gap_minutes}"
+    label = f"{'synthetic' if synthetic else 'Dataset B'} (gap={gap_minutes}min)"
     flow = DataFlow(label)
-    sessions = run_sessionize(lazy, SessionizeConfig(gap_minutes=gap_minutes), flow).collect()
 
-    suffix = "synthetic" if synthetic else f"gap{gap_minutes}"
+    source_sessions = paths.INTERIM / f"sessions_{base_suffix}.parquet"
+    if reuse_sessions:
+        if not source_sessions.exists():
+            raise typer.BadParameter(f"no sessions file at {source_sessions}")
+        typer.echo(f"reusing {source_sessions.name}")
+        sessions = pl.read_parquet(source_sessions)
+    else:
+        lazy = make_event_log(n_users=500, seed=42).lazy() if synthetic else scan_dataset_b(source)
+        sessions = run_sessionize(
+            lazy, SessionizeConfig(gap_minutes=gap_minutes), flow
+        ).collect()
+        sessions.write_parquet(source_sessions)
+        flow.write(paths.TABLES / f"data_flow_{base_suffix}.csv")
+        typer.echo(flow.summary())
+
+    suffix = base_suffix
+    if sample_users > 0:
+        sessions, report = subsample_users(sessions, n_users=sample_users, seed=42)
+        suffix = f"{base_suffix}s{sample_users}"
+        typer.echo("")
+        typer.echo(report.summary())
+
     out = paths.INTERIM / f"sessions_{suffix}.parquet"
-    sessions.write_parquet(out)
-
-    flow.write(paths.TABLES / f"data_flow_{suffix}.csv")
-    typer.echo(flow.summary())
+    if out != source_sessions:
+        sessions.write_parquet(out)
 
     cuts = stage_cutpoints(sessions.lazy())
     cuts.write_parquet(paths.INTERIM / f"cutpoints_{suffix}.parquet")
@@ -184,6 +217,45 @@ def freeze_splits_cmd(
     typer.secho(
         "Splits are frozen. Every model and explanation must read them; "
         "the test partition opens exactly once, at final evaluation.",
+        fg=typer.colors.YELLOW,
+    )
+
+
+@app.command()
+def baselines_a(
+    models: str = typer.Option("", help="Comma-separated subset; default is all five"),
+    seeds: str = typer.Option("", help="Comma-separated subset of the frozen seed list"),
+    imbalance: str = "class_weight",
+) -> None:
+    """Run the Dataset A baselines (run-sheet step 7, Sec. 9-10)."""
+    paths.ensure_dirs()
+
+    from .data.ingest import load_dataset_a
+    from .models.baselines import BASELINE_MODELS
+    from .models.run_baselines import run_dataset_a_baselines, summary_table, write_results
+    from .seeds import SEEDS
+
+    chosen_models = tuple(m.strip() for m in models.split(",") if m.strip()) or BASELINE_MODELS
+    chosen_seeds = tuple(int(s) for s in seeds.split(",") if s.strip()) or SEEDS
+
+    typer.echo(f"models: {chosen_models}")
+    typer.echo(f"seeds:  {chosen_seeds}")
+
+    runs = run_dataset_a_baselines(
+        load_dataset_a(), models=chosen_models, seeds=chosen_seeds, imbalance=imbalance
+    )
+    write_results(runs, paths.TABLES)
+
+    summary = summary_table(runs)
+    typer.echo("")
+    typer.echo(
+        summary.select(
+            ["model", "n_seeds", "pr_auc_mean", "pr_auc_std", "roc_auc_mean", "ece_mean"]
+        )
+    )
+    typer.secho(
+        "Test partition opened. Any further change to features, models or thresholds "
+        "invalidates these numbers (Sec. 6.2).",
         fg=typer.colors.YELLOW,
     )
 

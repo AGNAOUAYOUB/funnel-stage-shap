@@ -120,32 +120,51 @@ def stage_cutpoints(lazy: pl.LazyFrame, config: JourneyConfig | None = None) -> 
     ordered = order_events(lazy, config)
     etype = pl.col(config.type_column).cast(pl.Utf8)
 
+    has_category = config.category_column in ordered.collect_schema().names()
+
+    # Each window expression is materialised as a column before anything
+    # references it. Composing them inline instead -- `browsing_signal` embeds
+    # `repeat_view`, and `browsing_ordinal` then names `browsing_signal` twice --
+    # makes Polars re-evaluate the innermost windows several times per pass,
+    # which is what turned a few million events into minutes of CPU.
+    #
     # Product interaction: any event carrying a product. In a REES46-class log
     # every event does, but the predicate is written explicitly so a source with
     # non-product events (site search, static pages) degrades correctly.
-    product_interaction = pl.col(config.product_column).is_not_null()
-    interaction_ordinal = (
-        pl.when(product_interaction)
-        .then(product_interaction.cum_sum().over(s))
-        .otherwise(None)
+    flags = ordered.with_columns(
+        pl.col(config.product_column).is_not_null().alias("_is_interaction"),
+        # Repeat view: this product has been seen earlier in the same session.
+        # `is_first_distinct().over(session)` is one single-key window pass;
+        # `cum_count().over([session, product])` was a two-key window over
+        # millions of distinct (session, product) groups.
+        (
+            (etype == "view")
+            & ~pl.col(config.product_column).is_first_distinct().over(s)
+        ).alias("_repeat_view"),
     )
 
-    # Repeat view: this product has been seen earlier in the same session.
-    repeat_view = (etype == "view") & (
-        pl.col(config.product_column).cum_count().over([s, config.product_column]) > 1
-    )
-
-    # Category switch: category differs from the previous event's category.
-    has_category = config.category_column in ordered.collect_schema().names()
+    # Category switch: a *view* whose category differs from the previous event's.
+    #
+    # The `etype == "view"` guard is load-bearing. Without it a cart event whose
+    # category differs from the preceding view counts as a browsing signal, so it
+    # can open S2 and S3 on the very same event: on real REES46 data that made
+    # 45% of S2/S3 cut-points identical, collapsing the S2->S3 leg of the
+    # migration figure exactly as the first-signal rule had collapsed S1->S2
+    # (amendment A8). The synthetic fixture never showed it, because there carts
+    # always inherit the preceding view's category. S2 is defined as
+    # "product/category browsing", so only browsing events may trigger it.
     if has_category:
         prev_category = pl.col(config.category_column).shift().over(s)
-        category_switch = (
-            prev_category.is_not_null()
-            & pl.col(config.category_column).is_not_null()
-            & (pl.col(config.category_column) != prev_category)
+        flags = flags.with_columns(
+            (
+                (etype == "view")
+                & prev_category.is_not_null()
+                & pl.col(config.category_column).is_not_null()
+                & (pl.col(config.category_column) != prev_category)
+            ).alias("_cat_switch")
         )
     else:
-        category_switch = pl.lit(False)
+        flags = flags.with_columns(pl.lit(False).alias("_cat_switch"))
 
     # S2 opens on the *second* browsing signal, not the first (amendment A8).
     # A single repeat view or category switch is incidental and, for most
@@ -154,17 +173,21 @@ def stage_cutpoints(lazy: pl.LazyFrame, config: JourneyConfig | None = None) -> 
     # empty. Requiring two signals is the "consideration is established, not
     # incidental" reading, and it separates the stages by construction: the
     # earliest possible second signal is the third event.
-    browsing_signal = repeat_view | category_switch
-    browsing_ordinal = (
-        pl.when(browsing_signal).then(browsing_signal.cum_sum().over(s)).otherwise(None)
+    flags = flags.with_columns(
+        (pl.col("_repeat_view") | pl.col("_cat_switch")).alias("_browsing_signal")
+    ).with_columns(
+        pl.col("_is_interaction").cum_sum().over(s).alias("_interaction_ordinal"),
+        pl.col("_browsing_signal").cum_sum().over(s).alias("_browsing_ordinal"),
     )
 
-    # The row-wise flags above need window expressions; everything else folds
-    # into this single aggregation pass.
     per_session = (
-        ordered.with_columns(
-            (interaction_ordinal == 2).alias("_is_second_interaction"),
-            (browsing_ordinal == 2).alias("_is_second_browsing_signal"),
+        flags.with_columns(
+            (pl.col("_is_interaction") & (pl.col("_interaction_ordinal") == 2)).alias(
+                "_is_second_interaction"
+            ),
+            (pl.col("_browsing_signal") & (pl.col("_browsing_ordinal") == 2)).alias(
+                "_is_second_browsing_signal"
+            ),
         )
         .group_by(s)
         .agg(
@@ -195,9 +218,26 @@ def stage_cutpoints(lazy: pl.LazyFrame, config: JourneyConfig | None = None) -> 
     # of S1 having no features and H2 circular at S1. Two interactions is the
     # minimum that gives awareness a measurable dwell, inter-event gap and
     # category distribution.
+    #
+    # Stages are *ordered*, and a stage whose trigger fires out of order is not
+    # reached rather than shunted into place. The earlier rule pushed a later
+    # stage's cut-point forward past an earlier stage's, which meant a visitor
+    # who carted before browsing much had S3 dragged onto S2's cut-point: on real
+    # data that made 45% of S2/S3 prefixes identical and emptied the S2->S3 leg
+    # of the migration figure. A visitor who carts before establishing
+    # consideration did not pass through consideration -- they skipped it, and
+    # S2 is simply unreached for them.
     cut_s1 = pl.col("second_interaction")
-    cut_s2 = pl.col("second_browsing_signal")
-    cut_s3 = pl.col("first_cart")
+    cut_s2 = pl.when(
+        pl.col("second_browsing_signal").is_not_null()
+        & (pl.col("second_browsing_signal") > cut_s1)
+        & (
+            pl.col("first_cart").is_null()
+            | (pl.col("second_browsing_signal") < pl.col("first_cart"))
+        )
+    ).then(pl.col("second_browsing_signal"))
+    # S3 is anchored on the cart itself and never moved.
+    cut_s3 = pl.when(pl.col("first_cart") >= cut_s1).then(pl.col("first_cart"))
     # S4 opens at the purchase (or session end) and is descriptive only.
     cut_s4 = pl.col("first_purchase").fill_null(pl.col("n_events") - 1)
 
@@ -205,8 +245,8 @@ def stage_cutpoints(lazy: pl.LazyFrame, config: JourneyConfig | None = None) -> 
         max_admissible_idx=max_idx,
     ).with_columns(
         cut_S1=_clip(cut_s1, pl.col("max_admissible_idx")),
-        cut_S2=_clip(_monotone(cut_s2, cut_s1), pl.col("max_admissible_idx")),
-        cut_S3=_clip(_monotone(cut_s3, cut_s2, cut_s1), pl.col("max_admissible_idx")),
+        cut_S2=_clip(cut_s2, pl.col("max_admissible_idx")),
+        cut_S3=_clip(cut_s3, pl.col("max_admissible_idx")),
         cut_S4=cut_s4,
     )
 
@@ -259,21 +299,12 @@ def _clip(expr: pl.Expr, upper: pl.Expr) -> pl.Expr:
     return pl.when(expr.is_not_null() & (expr <= upper)).then(expr).otherwise(None)
 
 
-def _monotone(own_trigger: pl.Expr, *earlier: pl.Expr) -> pl.Expr:
-    """Push a cut-point forward past earlier stages, but only if its own trigger fired.
-
-    ``max_horizontal`` skips nulls, so a bare ``max_horizontal(first_cart,
-    first_view)`` would quietly hand a cart-less session its S1 index as an S3
-    cut-point -- inventing an intent stage the visitor never reached and
-    inflating S3's N to the whole population. The ``when`` guard is what keeps
-    "did not reach this stage" distinct from "reached it at the same moment as
-    the previous stage".
-    """
-    return (
-        pl.when(own_trigger.is_not_null())
-        .then(pl.max_horizontal(own_trigger, *earlier))
-        .otherwise(None)
-    )
+#
+# `_monotone` used to live here: it pushed a stage's cut-point forward past the
+# earlier stages' cut-points. It was removed in favour of the ordering rule in
+# `stage_cutpoints`, which marks an out-of-order stage unreached instead of
+# shunting it into place -- see the comment there. Shunting made 45% of S2/S3
+# prefixes identical on real data.
 
 
 def prefix_events(

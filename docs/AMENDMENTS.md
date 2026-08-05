@@ -255,6 +255,34 @@ Recommend (a) plus reporting the shift explicitly — it is an honest property o
 and hiding it by re-cutting until the partitions match would be exactly the kind of
 post-hoc tuning the protocol freeze exists to prevent.
 
+**CONFIRMED EMPIRICALLY (run-sheet step 7).** The predicted harm is real and large. Across
+all five baselines at five seeds, test-set ECE is 0.105–0.117 — an order of magnitude worse
+than a well-calibrated model. For LightGBM at seed 7 on the December test month:
+
+- mean predicted probability **0.2421** against an actual prevalence of **0.1251**
+- ratio **1.935**, almost exactly the Nov/Dec prevalence ratio of 0.2535 / 0.1251 = **2.03**
+- the model **over-predicts in every single reliability bin**, not just on average
+
+This is textbook prior-probability shift: the isotonic calibrator was fitted on November's
+25.4% base rate and applied to December's 12.5%. The discrimination metrics are unaffected
+(PR-AUC 0.710 ± 0.008 for LightGBM, ROC-AUC 0.899), because ranking is invariant to a
+monotone miscalibration — but every probability the model emits is roughly double the truth,
+which makes the Sec. 10 threshold and any RQ4 cost-based intervention argument unusable as
+they stand. Option (a) is no longer a preference; some prevalence correction is required.
+
+**Dataset A baseline results (test = December, month-ordered split, 5 seeds):**
+
+| Model | PR-AUC | ROC-AUC | ECE |
+|---|---|---|---|
+| LightGBM | 0.710 ± 0.008 | 0.899 | 0.117 |
+| XGBoost | 0.707 ± 0.008 | 0.902 | 0.116 |
+| CatBoost | 0.699 ± 0.014 | 0.905 | 0.115 |
+| Random Forest | 0.694 ± 0.011 | 0.910 | 0.105 |
+| Logistic Regression | 0.575 ± 0.000 | 0.879 | 0.102 |
+
+Logistic regression's zero standard deviation is correct, not a bug: with a fixed split and
+a convex objective it is deterministic, so the seed changes nothing.
+
 ### A13. LightGBM must be imported before scikit-learn on Windows (Sec. 4, 6.2)
 
 **Decision.** `funnel_shap/__init__.py` imports LightGBM eagerly on Windows, before anything
@@ -300,6 +328,84 @@ first run. The index is now cast to `Int64` before the subtraction.
 This is the clearest argument for why the leakage invariants are unit tests rather than
 review comments: the bug arrived as a *performance* change, in a different function, and
 nothing about it looked like a leak.
+
+### A15. Dataset B is subsampled to 200,000 users, seeded (Sec. 5.3, Appendix C)
+
+**Decision.** Analysis runs on a seeded random sample of 200,000 users, keeping every
+session those users have. Seed 42. The full month stays on disk and its data-flow table is
+reported, so the sampling fraction is auditable.
+
+**Why.** Sec. 5.3 sets the requirement at ">=52k sessions" and explicitly permits
+subsampling "for tractability, documented and seeded". October 2019 alone yields 5,366,181
+sessions — about 100x the floor — and Appendix C budgets TimeSHAP at roughly 1–5k
+sequences. The binding constraint is compute, not evidence. Concretely: cut-point
+computation on the full month did not finish after 1.9 CPU-hours even with the A14
+optimisation, because grouping 37.4M events by a 5.4M-cardinality string key dominates
+everything else.
+
+**Sampling is by user, never by session.** Both Sec. 7.6 split protocols keep a visitor
+whole. Sampling sessions independently would tear users apart before the splitter ever saw
+them, silently defeating the identity-leakage guarantee the grouped split exists to provide.
+
+**The sample is a hash of (seed, user id)**, not a function of iteration order, so it is
+stable across reruns, Polars versions and row orderings. It is also *nested*: at a fixed
+seed a larger sample is a strict superset of a smaller one, which makes a sample-size
+sensitivity check cheap — rerun at 400k and the 200k results are a subset, so any
+difference is attributable to the added users rather than to a different draw.
+
+**To report in the paper.** The sampling fraction, the seed, and a sample-size sensitivity
+check (200k vs 400k users) alongside the Sec. 7.2 gap sensitivity. If headline conclusions
+move between sample sizes, the sample is too small and must be raised.
+
+### A16. Out-of-order stages are unreached, not shunted (Sec. 7.3)
+
+**Decision.** A stage whose trigger fires out of funnel order is marked *unreached* rather
+than pushed forward. Concretely: a visitor who carts before producing a second browsing
+signal skipped consideration, so S2 is null for them and S3 sits on the cart. The
+`_monotone` helper that pushed later cut-points past earlier ones is gone.
+
+**Why.** With shunting, S3 was dragged onto S2's cut-point whenever the cart came first, and
+on real REES46 data **45.1% of S2/S3 pairs had identical cut-points** — the same collapse
+A8 fixed on the S1→S2 leg, reappearing on S2→S3. After the change both legs are 0% identical,
+with mean gaps of 2.49 and 5.37 events.
+
+**Also fixed: cart events were counting as browsing signals.** A cart in a different category
+from the preceding view satisfied "category switch", so it could open S2 and S3 on the same
+event. S2 is defined as "product/category browsing", so its triggers are now restricted to
+view events. The synthetic fixture never exposed this, because there carts always inherit
+the preceding view's category — a reminder that the fixture pins semantics, not realism.
+
+**Resulting Dataset B stage table** (200k-user subsample, 485,459 sessions):
+
+| Stage | N | Reach | Prevalence |
+|---|---|---|---|
+| S1 | 475,140 | 97.9% | 8.8% |
+| S2 | 233,160 | 48.0% | 6.8% |
+| S3 | 45,031 | 9.3% | 52.1% |
+
+**This complicates H1.** H1 predicts PR-AUC rising monotonically from awareness to intent.
+But S2's prevalence (6.8%) is *lower* than S1's (8.8%), because the visitors who cart early
+— the ones most likely to convert — skip consideration and are excluded from S2 entirely.
+The population that lingers in consideration is genuinely less likely to buy. Expect the
+improvement curve to dip at S2 and jump at S3, and be prepared to report that as a finding
+about the funnel rather than as a failure of the model.
+
+### A17. The temporal split costs 54% of Dataset B's sessions (Sec. 7.6)
+
+**Observed, not decided.** On the 200k-user subsample the temporal split retains 222,268 of
+485,459 sessions: train 154,661, val 28,892, test 38,715, with **51,256 of 200,000 users
+dropped as straddlers**. The grouped split retains all 485,459.
+
+**Why.** The window is a single month and visitors return within it, so a user assigned to
+the training period by their first session very often remains active past the train/val
+boundary. Keeping them would either leak identity across the boundary or break the temporal
+ordering; A11 chose to drop them and count them.
+
+**Judgement.** The retained 222k sessions are still 4x the Sec. 5.3 floor, so the temporal
+split remains viable as the headline. But the loss must be reported, and it is an argument
+for widening Dataset B to two or three months: with a longer window the straddling band is a
+much smaller fraction of the whole. Recommend reporting both splits side by side, with the
+retention figures visible, rather than quietly showing only the temporal result.
 
 ### A9. Python 3.13 is present on the machine; the project pins 3.11 (Sec. 4)
 

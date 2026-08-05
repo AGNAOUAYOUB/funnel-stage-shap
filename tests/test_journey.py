@@ -171,6 +171,24 @@ def test_repeat_views_and_switches_both_count_as_signals() -> None:
     assert cuts["cut_S2"][0] == 2
 
 
+def test_cart_events_are_not_browsing_signals() -> None:
+    """A cart must not open S2, or S2 and S3 collapse onto the same event.
+
+    On real REES46 data this collapsed 45% of S2/S3 pairs, because a cart in a
+    different category from the preceding view counted as a category switch.
+    """
+    lazy = _log(
+        [
+            ("2019-10-01 00:00:00", "view", 1, 1),
+            ("2019-10-01 00:00:30", "view", 2, 2),  # signal 1: browsing switch
+            ("2019-10-01 00:01:00", "cart", 3, 3),  # different category, but a cart
+        ]
+    )
+    cuts = stage_cutpoints(lazy)
+    assert cuts["cut_S2"][0] is None, "a cart event opened S2"
+    assert cuts["cut_S3"][0] == 2
+
+
 def test_s2_is_null_on_a_single_browsing_signal() -> None:
     lazy = _log(
         [
