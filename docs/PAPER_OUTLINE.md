@@ -356,9 +356,24 @@ chance (S3 lift 1.09), so the actionable window is **early and mid funnel**, whi
 opposite of where cart-abandonment practice concentrates spend. Together these are the
 paper's practical contribution.
 
-**[PENDING]** the formal contrast: fit the static whole-session model on Dataset A, compute
-its SHAP ranking, and tabulate which drivers the stage view separates that the static one
-merges.
+**The formal contrast.** [HAVE] `static_contrast` builds the counterfactual a static analysis
+would report — the stage-average attribution share — and measures how far each driver
+actually travels. → **Table 10**
+
+| Driver | Static share | Range | Peak | Shape |
+|---|---|---|---|---|
+| engagement & tempo | 0.292 | 0.199 | 0.368 at S2 | non-monotone |
+| price | 0.352 | 0.198 | 0.437 at S1 | non-monotone |
+| navigation & category | 0.111 | 0.189 | 0.224 at S2 | non-monotone |
+
+**Navigation is the strongest case in relative terms.** A static analysis reports 0.111 and
+would rank it a minor driver; it actually reaches **0.224 at S2** — twice the static figure —
+and falls to 0.074 by S3. The static number is not merely imprecise, it is a value the
+driver never takes at any stage.
+
+Note the static baseline is built on the *same* data by pooling stages, not by switching to
+Dataset A. Comparing across datasets would confound the question with a change of schema and
+grain, which is a different claim.
 
 **4.7 Statistical comparisons.** [PENDING] Pre-declared confirmatory pairs only, with Holm
 adjustment and effect sizes beside every p-value. → **Table 11**
@@ -381,7 +396,24 @@ literature's caution about the reflexive 30-minute rule is well founded in gener
 useful contribution here is showing it is not load-bearing *for these conclusions*, rather
 than repeating the caution and moving on.
 
-**[PENDING]** subsample size (200k vs 400k users); temporal vs grouped split.
+**Subsample size (amendment A15).** [HAVE] Doubling to 400,000 users:
+
+| Stage | PR-AUC 200k | PR-AUC 400k | Δ | Lift 200k | Lift 400k | ROC-AUC 200k | ROC-AUC 400k |
+|---|---|---|---|---|---|---|---|
+| S1 | 0.1312 | 0.1346 | +0.0034 | 1.79 | 1.84 | 0.6406 | 0.6482 |
+| S2 | 0.0834 | 0.0873 | +0.0040 | 1.41 | 1.49 | 0.6198 | 0.6341 |
+| S3 | 0.5681 | 0.5766 | +0.0086 | 1.09 | 1.10 | 0.5695 | 0.5699 |
+
+Every metric improves slightly with more data — expected, and evidence the 200k sample is
+mildly conservative rather than distorting. **The headline conclusion is unchanged:** lift
+still falls monotonically (1.84 → 1.49 → 1.10) and ROC-AUC with it (0.648 → 0.634 → 0.570).
+Stage reach and prevalence are near-identical (S1 0.0886 vs 0.0885, S3 0.5213 vs 0.5210).
+
+Because the sample is nested at a fixed seed, the 400k set is a strict superset of the
+200k one, so these differences are attributable to the added users rather than to a
+different draw. State that — it is what makes the comparison interpretable.
+
+**[PENDING]** temporal vs grouped split comparison.
 
 ---
 
@@ -491,8 +523,8 @@ should be the one a reader remembers, so budget real design effort for it.
 | # | Item | Status |
 |---|---|---|
 | Fig 1 | Data-flow diagram | [HAVE] |
-| Fig 2 | Prediction-improvement curve by stage | [PENDING] |
-| Fig 3 | **Attribution migration trajectories** | [HAVE, 1 seed] |
+| Fig 2 | Prediction-improvement curve by stage | [HAVE] |
+| Fig 3 | **Attribution migration trajectories** | [HAVE] |
 | Fig 4 | Faithfulness / deletion-insertion curves | [HAVE] |
 | Fig 5 | Reliability diagram under prevalence shift | [HAVE] |
 | Tab 1 | Related-work positioning | — |
@@ -500,12 +532,12 @@ should be the one a reader remembers, so budget real design effort for it.
 | Tab 3 | Stage definitions, N, reach, prevalence | [HAVE] |
 | Tab 4 | Feature availability by stage | [HAVE] |
 | Tab 5 | Dataset A baselines | [HAVE] |
-| Tab 6 | Dataset B stage models | [PENDING] |
-| Tab 7 | Ablation ladder | [PENDING] |
+| Tab 6 | Dataset B stage models | [HAVE] |
+| Tab 7 | Ablation ladder | [HAVE] |
 | Tab 8 | Stage distinctness | [HAVE] |
 | Tab 9 | Explanation quality | [HAVE] |
-| Tab 10 | Static vs stage-conditioned actionability | [NOT BUILT] |
-| Tab 11 | Statistical comparisons, Holm-adjusted | [PENDING] |
+| Tab 10 | Static vs stage-conditioned actionability | [HAVE] |
+| Tab 11 | Statistical comparisons, Holm-adjusted | [HAVE] |
 
 ---
 

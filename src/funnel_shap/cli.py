@@ -534,6 +534,40 @@ def sequence_arm(
 
 
 @app.command()
+def figures(suffix: str = _SUFFIX_OPT) -> None:
+    """Build the publication figures (Sec. 15 deliverables)."""
+    paths.ensure_dirs()
+
+    from .report.figures import build_all
+
+    built = build_all(suffix)
+    if not built:
+        raise typer.BadParameter("no input tables found; run the analysis commands first")
+    for name, written in built.items():
+        typer.echo(f"{name}: " + ", ".join(p.name for p in written))
+    typer.echo(f"\n-> {paths.FIGURES}")
+
+
+@app.command()
+def static_contrast(suffix: str = _SUFFIX_OPT) -> None:
+    """RQ4: what a static whole-session attribution would flatten (Sec. 11.1)."""
+    paths.ensure_dirs()
+
+    from .explain.static_contrast import static_contrast_table, summarise_contrast
+
+    path = paths.TABLES / f"attribution_migration_{suffix}.csv"
+    if not path.exists():
+        raise typer.BadParameter(f"no migration table at {path}; run stage-shap first")
+
+    table = static_contrast_table(pl.read_csv(path))
+    table.write_csv(paths.TABLES / f"static_contrast_{suffix}.csv")
+    typer.echo("")
+    typer.echo(summarise_contrast(table))
+    typer.echo("")
+    typer.echo(f"-> {paths.TABLES / f'static_contrast_{suffix}.csv'}")
+
+
+@app.command()
 def check_config(path: Path) -> None:
     """Validate a run YAML against the protocol schema (Appendix A)."""
     config = load_config(path)
