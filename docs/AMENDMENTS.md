@@ -592,6 +592,50 @@ This understated the reported ± std, which Sec. 6.2 relies on to represent run-
 variability. `subsample_freq=1` is now set alongside `subsample`. All Dataset B stage
 numbers are being regenerated; results predating this fix have artificially tight spreads.
 
+### A22. H4 is not supported, but the test as designed is underpowered (Sec. 11.2, RQ3)
+
+**Report both halves. The second is the more important one.**
+
+GRU per stage, trained on the same prefixes as the tree models, explained with TimeSHAP,
+feature rankings correlated against TreeSHAP:
+
+| Stage | GRU test PR-AUC | Tree test PR-AUC | H4 Spearman | Concepts | vs 0.6 |
+|---|---|---|---|---|---|
+| S1 | 0.1237 | 0.1312 | +0.200 | 4 | fail |
+| S2 | 0.0593 | 0.0834 | +0.500 | 5 | fail |
+| S3 | 0.5646 | 0.5681 | +0.600 | 5 | fail (threshold is strict) |
+
+**The sequence model is not broken**, which matters — a failed convergence test would be
+uninformative if one paradigm were simply incompetent. The GRU matches the tree models at S1
+(0.124 vs 0.131) and S3 (0.565 vs 0.568) and trails at S2, so both arms are genuinely
+modelling the same signal.
+
+**The comparison rests on four or five concepts.** That is the finding. Spearman on n = 4
+takes only a handful of discrete values — with four items the achievable correlations are
+±1.0, ±0.8, ±0.6, ±0.4, ±0.2, 0 — so a "correlation" here is barely a statistic, and the
+pre-registered 0.6 threshold is being applied to a quantity that cannot land near it by
+chance in any meaningful sense. The concept count is small because Dataset B lacks device
+and traffic-source fields, the per-timestep feature set is deliberately compact, and two
+event-type indicators have no prefix-aggregate counterpart at all.
+
+H4 was pre-registered without anticipating that the two paradigms would share so few
+mappable concepts. Recording that honestly is worth more than a verdict computed on five
+points.
+
+**A better test exists and should be run before submission.** Rather than correlating
+aggregate importance across ~5 concepts, correlate **per-instance attributions** for the
+concepts that do map: thousands of paired observations instead of five, and a direct answer
+to whether the paradigms agree about *individual journeys* rather than about a global
+ranking. That is a stronger reading of "convergent validity" than the pre-registered one and
+should be reported alongside it, not instead of it.
+
+**One genuine signal in the current numbers.** Agreement rises monotonically down the funnel
+(0.200, 0.500, 0.600). The paradigms converge where the signal concentrates. That is
+consistent with the Layer 3 result — S2 is also where faithfulness missed its threshold —
+and with A19: stages with weaker signal produce explanations that are both less faithful and
+less reproducible across paradigms. Three independent measurements pointing the same way is
+worth a paragraph in the discussion.
+
 ### A9. Python 3.13 is present on the machine; the project pins 3.11 (Sec. 4)
 
 **Decision.** The project venv is CPython 3.11.15, provisioned by `uv`, independent of the

@@ -312,9 +312,34 @@ predictive lift is weakest relative to its base rate. A model with less signal t
 produces attributions that are harder to validate; the two findings are consistent, and
 saying so is stronger than treating the faithfulness miss as noise.
 
-**[PENDING]** the H4 cross-paradigm arm — TreeSHAP vs TimeSHAP — needs the sequence model.
-`rank_consistency` already takes the pre-registered 0.6 threshold, so only the second
-attribution source is missing.
+**H4 (cross-paradigm).** [HAVE] GRU per stage, TimeSHAP attribution, ranking correlated
+against TreeSHAP:
+
+| Stage | GRU PR-AUC | Tree PR-AUC | Spearman | Concepts compared |
+|---|---|---|---|---|
+| S1 | 0.1237 | 0.1312 | +0.200 | 4 |
+| S2 | 0.0593 | 0.0834 | +0.500 | 5 |
+| S3 | 0.5646 | 0.5681 | +0.600 | 5 |
+
+**H4 is not supported at the pre-registered threshold, and the test is underpowered.**
+Report both, and lead with the second. The comparison rests on four or five mappable
+concepts — with four items Spearman can only take ±1.0, ±0.8, ±0.6, ±0.4, ±0.2 or 0, so the
+0.6 threshold is being applied to something that is barely a statistic. State plainly that
+H4 was pre-registered without anticipating how few concepts the two paradigms would share.
+
+Note that the GRU is *competitive* (0.124 vs 0.131 at S1, 0.565 vs 0.568 at S3), so this is
+not a failed convergence test caused by one incompetent arm.
+
+**Agreement rises monotonically down the funnel** (0.200 → 0.500 → 0.600). Combined with S2
+having both the weakest lift (A19) and the only faithfulness miss (4.5), three independent
+measurements say the same thing: **where signal is weak, explanations are less faithful and
+less reproducible across paradigms.** That deserves its own paragraph in 5.1 — it is a
+finding about when to trust an explanation, which is the paper's subject.
+
+**[PENDING] before submission:** the per-instance convergence test. Correlating attributions
+across thousands of individual journeys, rather than across five aggregate concepts, is both
+better powered and a stronger reading of convergent validity. Report it alongside the
+pre-registered version, not instead of it.
 
 **4.6 RQ4 — actionability.** [PARTIAL] What stage-conditioned attributions identify that
 static whole-session SHAP misses. → **Table 10**
