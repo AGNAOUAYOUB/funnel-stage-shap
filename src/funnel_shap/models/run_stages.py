@@ -27,6 +27,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 import polars as pl
+from sklearn.calibration import CalibratedClassifierCV
 
 from ..data.journey import MODELLING_STAGES, StageName
 from ..data.splits import load_split
@@ -35,6 +36,7 @@ from ..evaluate.metrics import ClassificationReport, evaluate_predictions, selec
 from ..features.dictionary import ALL_FEATURE_SETS, FEATURE_DICTIONARY, feature_names
 from ..seeds import SEEDS, set_global_seed
 from .baselines import build_pipeline
+from .run_baselines import _stratified_sample
 
 
 @dataclass
@@ -74,6 +76,8 @@ def run_stage_models(
     imbalance: str = "class_weight",
     n_resamples: int = 2000,
     keep_fitted: bool = False,
+    calibrate: str = "isotonic",
+    calibration_fraction: float = 0.20,
 ) -> list[StageRun]:
     """Fit and evaluate a model per (stage, model, seed, feature set)."""
     split = load_split(suffix, protocol)
@@ -91,6 +95,16 @@ def run_stage_models(
         masks = {name: partition == name for name in ("train", "val", "test")}
         if not masks["test"].any() or y[masks["test"]].sum() == 0:
             continue
+
+        # Calibration slice, drawn once per stage so every feature set and seed
+        # is fitted and calibrated on identical rows -- otherwise an ablation
+        # difference would partly reflect a different training sample.
+        rng = np.random.default_rng(0)
+        train_idx = np.flatnonzero(masks["train"])
+        calibration_rows = train_idx[
+            _stratified_sample(y[train_idx], rng, fraction=calibration_fraction)
+        ]
+        fit_rows = np.setdiff1d(train_idx, calibration_rows)
 
         available = feature_names(stage)
 
@@ -113,14 +127,25 @@ def run_stage_models(
                     pipeline = build_pipeline(
                         model_type, columns, [], seed=seed, imbalance=imbalance
                     )
-                    pipeline.fit(X[masks["train"]], y[masks["train"]])
+                    pipeline.fit(X.iloc[fit_rows], y[fit_rows])
 
-                    val_scores = pipeline.predict_proba(X[masks["val"]])[:, 1]
+                    # Same correction as A18 on Dataset A: calibrate on a slice
+                    # of the training period, not on validation. Uncalibrated
+                    # stage models ran to ECE 0.33, which makes their
+                    # probabilities unusable for the RQ4 intervention argument
+                    # even though their rankings are fine.
+                    if calibrate != "none":
+                        scorer = CalibratedClassifierCV(pipeline, method=calibrate, cv="prefit")
+                        scorer.fit(X.iloc[calibration_rows], y[calibration_rows])
+                    else:
+                        scorer = pipeline
+
+                    val_scores = scorer.predict_proba(X[masks["val"]])[:, 1]
                     threshold = select_threshold(y[masks["val"]], val_scores, objective="f1")
 
-                    test_scores = pipeline.predict_proba(X[masks["test"]])[:, 1]
+                    test_scores = scorer.predict_proba(X[masks["test"]])[:, 1]
                     _, shift = correct_prior_shift(
-                        test_scores, prior_source=float(y[masks["train"]].mean())
+                        test_scores, prior_source=float(y[calibration_rows].mean())
                     )
 
                     # Bootstrap CIs only on the headline feature set. The

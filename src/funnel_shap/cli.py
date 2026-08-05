@@ -328,6 +328,14 @@ def stage_models(
         typer.echo("")
         typer.echo(table)
 
+        # Sec. 12: the confirmatory family, corrected across all of it.
+        from .evaluate.stage_tests import run_stage_comparisons, summarise
+
+        comparisons = run_stage_comparisons(runs)
+        comparisons.write_csv(paths.TABLES / f"comparisons_{suffix}.csv")
+        typer.echo("")
+        typer.echo(summarise(comparisons))
+
 
 @app.command()
 def check_config(path: Path) -> None:
