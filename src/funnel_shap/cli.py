@@ -393,6 +393,82 @@ def stage_shap(
 
 
 @app.command()
+def explanation_quality(
+    suffix: str = _SUFFIX_OPT,
+    protocol: str = "temporal",
+    model: str = "lightgbm",
+    seed: int = 42,
+    consistency: bool = typer.Option(True, help="Run the across-seed consistency arm"),
+    stability: bool = typer.Option(True, help="Run the local-Lipschitz arm (slow)"),
+) -> None:
+    """Layer 3: faithfulness, stability and consistency (Sec. 11.3, RQ3)."""
+    paths.ensure_dirs()
+
+    from .data.journey import MODELLING_STAGES
+    from .explain.run_quality import evaluate_stage_quality, seed_consistency
+    from .explain.run_stage_shap import explain_stages
+
+    features = {}
+    for stage in MODELLING_STAGES:
+        path = paths.PROCESSED / f"features_{suffix}_{stage}.parquet"
+        if path.exists():
+            features[stage] = pl.read_parquet(path)
+    if not features:
+        raise typer.BadParameter(f"no feature matrices for suffix {suffix!r}")
+
+    explanations = explain_stages(
+        features, suffix=suffix, protocol=protocol, model_type=model,
+        seed=seed, background_size=300, max_explain=1000,
+    )
+    quality = evaluate_stage_quality(explanations, seed=seed, with_stability=stability)
+
+    rows = []
+    typer.echo("")
+    for stage, q in quality.items():
+        typer.echo(f"{stage}: {q.faithfulness.summary()}")
+        typer.echo(
+            f"     deletion AUC {q.deletion_auc:.4f} (monotone={q.deletion_monotone})  "
+            f"insertion AUC {q.insertion_auc:.4f}"
+        )
+        if q.stability:
+            typer.echo(f"     {q.stability.summary()}")
+        rows.append(
+            {
+                "stage": stage,
+                "faithfulness_corr": q.faithfulness.correlation_mean,
+                "faithfulness_sd": q.faithfulness.correlation_std,
+                "faithfulness_passes": q.faithfulness.passes,
+                "deletion_auc": q.deletion_auc,
+                "insertion_auc": q.insertion_auc,
+                "deletion_monotone": q.deletion_monotone,
+                "lipschitz_max": q.stability.max_ratio if q.stability else None,
+                "lipschitz_mean": q.stability.mean_ratio if q.stability else None,
+            }
+        )
+
+    if consistency:
+        typer.echo("")
+        results = seed_consistency(
+            features, suffix=suffix, protocol=protocol, model_type=model
+        )
+        by_stage = {}
+        for stage, result in results.items():
+            typer.echo(f"{stage}: {result.summary()}")
+            by_stage[stage] = result
+        for row in rows:
+            r = by_stage.get(row["stage"])
+            if r is not None:
+                row["seed_spearman_mean"] = r.mean_spearman
+                row["seed_spearman_min"] = r.min_spearman
+                row["seed_consistency_passes"] = r.passes
+
+    table = pl.DataFrame(rows)
+    table.write_csv(paths.TABLES / f"explanation_quality_{suffix}.csv")
+    typer.echo("")
+    typer.echo(f"-> {paths.TABLES / f'explanation_quality_{suffix}.csv'}")
+
+
+@app.command()
 def check_config(path: Path) -> None:
     """Validate a run YAML against the protocol schema (Appendix A)."""
     config = load_config(path)

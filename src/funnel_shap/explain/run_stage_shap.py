@@ -44,6 +44,16 @@ class StageExplanation:
     attribution: StageAttribution
     groups: dict[str, list[str]]
     n_train: int
+    #: The exact rows the attributions were computed on, in the same order, and
+    #: the background they were computed against. Carried here rather than
+    #: re-derived downstream: the explained set is a *random subsample* of
+    #: validation when it exceeds max_explain, so any attempt to reconstruct it
+    #: by re-slicing pairs each attribution with the wrong instance. That
+    #: silently drove the Layer 3 faithfulness correlation to zero before this
+    #: field existed.
+    explained_matrix: np.ndarray = None
+    background_matrix: np.ndarray = None
+    estimator: object = None
 
 
 def explain_stages(
@@ -116,7 +126,12 @@ def explain_stages(
             threshold=correlation_threshold,
         )
         out[stage] = StageExplanation(
-            attribution=attribution, groups=groups, n_train=int(train_mask.sum())
+            attribution=attribution,
+            groups=groups,
+            n_train=int(train_mask.sum()),
+            explained_matrix=explain_matrix,
+            background_matrix=background,
+            estimator=estimator,
         )
 
     return out
