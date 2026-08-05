@@ -255,6 +255,52 @@ Recommend (a) plus reporting the shift explicitly — it is an honest property o
 and hiding it by re-cutting until the partitions match would be exactly the kind of
 post-hoc tuning the protocol freeze exists to prevent.
 
+### A13. LightGBM must be imported before scikit-learn on Windows (Sec. 4, 6.2)
+
+**Decision.** `funnel_shap/__init__.py` imports LightGBM eagerly on Windows, before anything
+can pull in scikit-learn.
+
+**Why.** scikit-learn ships its own `sklearn/.libs/vcomp140.dll` for machines lacking the
+Visual C++ redistributable and loads it by absolute path. LightGBM's `lib_lightgbm.dll`
+links against the system `vcomp140.dll`. When scikit-learn wins the race, both OpenMP
+runtimes sit in the process and the first LightGBM `fit` dies with
+
+    OSError: exception: access violation reading 0x0000000000000000
+
+inside `LGBM_DatasetSetField` — a native crash with no Python-level cause. It reproduces
+after merely *using* scikit-learn, or importing XGBoost, CatBoost, SHAP or imbalanced-learn
+(all of which import scikit-learn). Preloading `vcomp140.dll` by name via ctypes does not
+help: the absolute-path load still creates a second module. Import order is the fix.
+
+Worth recording because it is invisible: it does not surface until a LightGBM baseline is
+fitted, and on a different machine — one where the redistributable placement differs — it
+may not surface at all, which makes it exactly the kind of environment-dependent failure
+Sec. 6.2's reproducibility requirements exist to pin down.
+
+### A14. `stage_cutpoints` computed cut-points as window expressions (Sec. 7.3)
+
+**Not a protocol change — a performance defect and a latent leak, both now fixed.**
+
+The first implementation computed each stage's cut-point with
+`pl.when(...).min().over(session)` and then took `first()` per group. That is five
+group-and-broadcast passes over the event frame *before* the aggregation. On the synthetic
+fixture it was imperceptible; on Dataset B's 37.4M events and 5.37M sessions it burned 2.6
+CPU-hours without finishing. Folding the five into a single `group_by().agg()` makes it
+complete, with identical semantics — the existing journey tests pass unchanged, which is
+what licenses the rewrite.
+
+**The latent leak.** Rewriting the within-session index in terms of `cum_count()` introduced
+an unsigned integer: `cum_count` returns `UInt32`, so for a session whose *first* event is a
+purchase, the anti-leakage clip `first_purchase - 1` wrapped to 4,294,967,295 instead of
+-1. Every cut-point would then have compared as admissible, and prefixes could have included
+the purchase event itself — silently defeating Sec. 7.4 for exactly the sessions where it
+matters most. `test_purchase_only_session_yields_no_admissible_prefix` caught it on the
+first run. The index is now cast to `Int64` before the subtraction.
+
+This is the clearest argument for why the leakage invariants are unit tests rather than
+review comments: the bug arrived as a *performance* change, in a different function, and
+nothing about it looked like a leak.
+
 ### A9. Python 3.13 is present on the machine; the project pins 3.11 (Sec. 4)
 
 **Decision.** The project venv is CPython 3.11.15, provisioned by `uv`, independent of the

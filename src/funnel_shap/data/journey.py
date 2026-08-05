@@ -73,21 +73,34 @@ def order_events(lazy: pl.LazyFrame, config: JourneyConfig | None = None) -> pl.
     one-second timestamp resolve identically on every rerun.
     """
     config = config or JourneyConfig()
+    s = config.session_column
     return (
         lazy.with_row_index("_file_order")
-        .sort([config.session_column, config.time_column, "_file_order"])
+        .sort([s, config.time_column, "_file_order"])
+        # On a frame already sorted by session, the within-session index is the
+        # global row number minus the session's first global row number. That is
+        # one window pass instead of the two that int_range().over() plus
+        # len().over() would cost, which matters at 37M rows / 5.4M sessions.
+        # Cast to a *signed* type before subtracting: cum_count returns UInt32,
+        # and the anti-leakage clip computes `first_purchase - 1`, which for a
+        # session whose first event is a purchase would wrap to 4294967295 and
+        # silently admit every cut-point including the label event itself.
         .with_columns(
-            pl.int_range(pl.len()).over(config.session_column).alias("event_idx"),
-            pl.len().over(config.session_column).alias("session_n_events"),
+            (pl.col("_file_order").cum_count().over(s).cast(pl.Int64) - 1).alias("event_idx"),
         )
     )
 
 
-def _first_index_where(condition: pl.Expr, session: str) -> pl.Expr:
-    """Index of the first event in the session satisfying ``condition``, else null."""
-    return (
-        pl.when(condition).then(pl.col("event_idx")).otherwise(None).min().over(session)
-    )
+def _first_index_where(condition: pl.Expr) -> pl.Expr:
+    """Index of the first event satisfying ``condition``, else null.
+
+    Written as an *aggregation* rather than a window expression. The window form
+    (``.min().over(session)``) needs a full group-and-broadcast pass per call,
+    and there are five of them; folding them into a single ``group_by().agg()``
+    turned a run that had burned 2.6 CPU-hours without finishing into one that
+    completes, with identical semantics.
+    """
+    return pl.when(condition).then(pl.col("event_idx")).otherwise(None).min()
 
 
 def stage_cutpoints(lazy: pl.LazyFrame, config: JourneyConfig | None = None) -> pl.DataFrame:
@@ -146,22 +159,23 @@ def stage_cutpoints(lazy: pl.LazyFrame, config: JourneyConfig | None = None) -> 
         pl.when(browsing_signal).then(browsing_signal.cum_sum().over(s)).otherwise(None)
     )
 
+    # The row-wise flags above need window expressions; everything else folds
+    # into this single aggregation pass.
     per_session = (
         ordered.with_columns(
-            _first_index_where(etype == "view", s).alias("_first_view"),
-            _first_index_where(interaction_ordinal == 2, s).alias("_second_interaction"),
-            _first_index_where(browsing_ordinal == 2, s).alias("_second_browsing_signal"),
-            _first_index_where(etype == "cart", s).alias("_first_cart"),
-            _first_index_where(etype == "purchase", s).alias("_first_purchase"),
+            (interaction_ordinal == 2).alias("_is_second_interaction"),
+            (browsing_ordinal == 2).alias("_is_second_browsing_signal"),
         )
         .group_by(s)
         .agg(
-            pl.first("_first_view").alias("first_view"),
-            pl.first("_second_interaction").alias("second_interaction"),
-            pl.first("_second_browsing_signal").alias("second_browsing_signal"),
-            pl.first("_first_cart").alias("first_cart"),
-            pl.first("_first_purchase").alias("first_purchase"),
-            pl.first("session_n_events").alias("n_events"),
+            _first_index_where(etype == "view").alias("first_view"),
+            _first_index_where(pl.col("_is_second_interaction")).alias("second_interaction"),
+            _first_index_where(pl.col("_is_second_browsing_signal")).alias(
+                "second_browsing_signal"
+            ),
+            _first_index_where(etype == "cart").alias("first_cart"),
+            _first_index_where(etype == "purchase").alias("first_purchase"),
+            pl.len().alias("n_events"),
             (etype == "purchase").any().alias("label"),
         )
         .collect()
