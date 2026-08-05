@@ -592,7 +592,7 @@ def static_contrast(suffix: str = _SUFFIX_OPT) -> None:
 def per_instance_h4(
     suffix: str = _SUFFIX_OPT,
     protocol: str = "temporal",
-    seed: int = 42,
+    seeds: str = typer.Option("42", help="Comma-separated seeds from the frozen list"),
     epochs: int = 4,
     max_sessions: int = 30000,
     n_explain: int = 400,
@@ -601,11 +601,18 @@ def per_instance_h4(
     paths.ensure_dirs()
 
     from .data.journey import MODELLING_STAGES
-    from .explain.per_instance_h4 import compare_per_instance, per_instance_table, summarise
+    from .explain.per_instance_h4 import (
+        aggregate_over_seeds,
+        compare_per_instance,
+        per_instance_table,
+        summarise,
+        summarise_seeds,
+    )
     from .explain.run_sequence import run_sequence_arm
     from .explain.run_stage_shap import explain_stages
     from .explain.sequence_shap import timeshap_instance_attributions
 
+    chosen = [int(s) for s in seeds.split(",") if s.strip()]
     sessions = pl.read_parquet(paths.INTERIM / f"sessions_{suffix}.parquet")
     cuts = pl.read_parquet(paths.INTERIM / f"cutpoints_{suffix}.parquet")
 
@@ -615,47 +622,58 @@ def per_instance_h4(
         if path.exists():
             features[stage] = pl.read_parquet(path)
 
-    explanations = explain_stages(
-        features, suffix=suffix, protocol=protocol, seed=seed,
-        background_size=300, max_explain=4000,
-    )
-    sequence = run_sequence_arm(
-        sessions, cuts, suffix=suffix, protocol=protocol, seed=seed,
-        epochs=epochs, max_sessions=max_sessions, n_explain=n_explain,
-        restrict_to_sessions={
-            stage: e.explained_session_ids for stage, e in explanations.items()
-        },
-    )
-
-    results = []
-    for stage, seq in sequence.items():
-        if stage not in explanations or seq.explained_X is None:
-            continue
-        per_instance = timeshap_instance_attributions(
-            seq.predict_fn, seq.explained_X, seq.train_X, seq.feature_names, seed=seed
+    per_seed: dict[int, pl.DataFrame] = {}
+    for seed in chosen:
+        typer.echo(f"seed {seed} ...")
+        explanations = explain_stages(
+            features, suffix=suffix, protocol=protocol, seed=seed,
+            background_size=300, max_explain=4000,
         )
-        tree = explanations[stage]
-        results.extend(
-            compare_per_instance(
-                tree.attribution.shap_values,
-                tree.attribution.feature_names,
-                tree.explained_session_ids,
-                per_instance,
-                seq.feature_names,
-                seq.explained_session_ids,
-                stage=stage,
+        sequence = run_sequence_arm(
+            sessions, cuts, suffix=suffix, protocol=protocol, seed=seed,
+            epochs=epochs, max_sessions=max_sessions, n_explain=n_explain,
+            restrict_to_sessions={
+                stage: e.explained_session_ids for stage, e in explanations.items()
+            },
+        )
+
+        results = []
+        for stage, seq in sequence.items():
+            if stage not in explanations or seq.explained_X is None:
+                continue
+            per_instance = timeshap_instance_attributions(
+                seq.predict_fn, seq.explained_X, seq.train_X, seq.feature_names, seed=seed
             )
-        )
+            tree = explanations[stage]
+            results.extend(
+                compare_per_instance(
+                    tree.attribution.shap_values,
+                    tree.attribution.feature_names,
+                    tree.explained_session_ids,
+                    per_instance,
+                    seq.feature_names,
+                    seq.explained_session_ids,
+                    stage=stage,
+                )
+            )
+        if results:
+            per_seed[seed] = per_instance_table(results)
 
-    if not results:
+    if not per_seed:
         raise typer.BadParameter("no stage produced enough shared sessions to compare")
 
-    table = per_instance_table(results)
-    table.write_csv(paths.TABLES / f"per_instance_h4_{suffix}.csv")
+    if len(per_seed) == 1:
+        table = next(iter(per_seed.values()))
+        table.write_csv(paths.TABLES / f"per_instance_h4_{suffix}.csv")
+        typer.echo("")
+        typer.echo(summarise(table))
+    else:
+        aggregated = aggregate_over_seeds(per_seed)
+        aggregated.write_csv(paths.TABLES / f"per_instance_h4_seeds_{suffix}.csv")
+        typer.echo("")
+        typer.echo(summarise_seeds(aggregated))
     typer.echo("")
-    typer.echo(summarise(table))
-    typer.echo("")
-    typer.echo(f"-> {paths.TABLES / f'per_instance_h4_{suffix}.csv'}")
+    typer.echo(f"-> {paths.TABLES}")
 
 
 @app.command()

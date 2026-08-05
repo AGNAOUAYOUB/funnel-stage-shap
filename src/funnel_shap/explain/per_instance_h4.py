@@ -125,6 +125,71 @@ def per_instance_table(results: list[PerInstanceH4], *, threshold: float = 0.6) 
     return pl.DataFrame(rows).sort(["stage", "spearman"], descending=[False, True])
 
 
+def aggregate_over_seeds(tables: dict[int, pl.DataFrame]) -> pl.DataFrame:
+    """Mean and spread of per-instance agreement across seeds (Sec. 6.2).
+
+    Sec. 6.2 forbids reporting single runs, and this result now carries real
+    weight: a negative correlation at S2 is a strong claim to make from one
+    GRU initialisation. The *sign consistency* column is the one that matters —
+    a mean near zero with the sign flipping between seeds is noise, whereas a
+    consistently negative value across seeds is a finding.
+    """
+    if not tables:
+        raise ValueError("no seed results to aggregate")
+
+    stacked = pl.concat(
+        [t.with_columns(pl.lit(seed).alias("seed")) for seed, t in tables.items()],
+        how="diagonal",
+    )
+    return (
+        stacked.group_by(["stage", "concept"])
+        .agg(
+            pl.col("spearman").mean().alias("rho_mean"),
+            pl.col("spearman").std().alias("rho_std"),
+            pl.col("spearman").min().alias("rho_min"),
+            pl.col("spearman").max().alias("rho_max"),
+            (pl.col("spearman") < 0).mean().alias("share_negative"),
+            pl.len().alias("n_seeds"),
+            pl.col("n_sessions").min().alias("n_sessions"),
+        )
+        .with_columns(
+            # Sign is consistent when every seed agrees on direction.
+            (
+                (pl.col("share_negative") == 0.0) | (pl.col("share_negative") == 1.0)
+            ).alias("sign_consistent")
+        )
+        .sort(["stage", "rho_mean"], descending=[False, True])
+    )
+
+
+def summarise_seeds(table: pl.DataFrame) -> str:
+    """Per-stage verdict across seeds, leading with sign consistency."""
+    lines = [
+        "Per-instance agreement across seeds",
+        "-" * 88,
+        f"{'stage':<6}{'concept':<24}{'mean':>8}{'sd':>7}{'min':>8}{'max':>8}{'sign':>9}",
+    ]
+    for row in table.to_dicts():
+        sign = "stable" if row["sign_consistent"] else "flips"
+        sd = row["rho_std"] if row["rho_std"] is not None else 0.0
+        lines.append(
+            f"{row['stage']:<6}{row['concept']:<24}{row['rho_mean']:>8.3f}{sd:>7.3f}"
+            f"{row['rho_min']:>8.3f}{row['rho_max']:>8.3f}{sign:>9}"
+        )
+
+    lines.append("")
+    per_stage = table.group_by("stage").agg(
+        pl.col("rho_mean").mean().alias("m"),
+        pl.col("sign_consistent").mean().alias("stable"),
+    ).sort("stage")
+    for row in per_stage.to_dicts():
+        lines.append(
+            f"{row['stage']}: mean rho {row['m']:+.3f} across concepts, "
+            f"{row['stable']:.0%} of concepts sign-stable across seeds"
+        )
+    return "\n".join(lines)
+
+
 def summarise(table: pl.DataFrame, *, threshold: float = 0.6) -> str:
     lines = [
         "Per-instance cross-paradigm agreement (H4, better powered than the aggregate test)",

@@ -115,3 +115,61 @@ def test_power_advantage_over_the_aggregate_test() -> None:
 def test_empty_results_are_rejected() -> None:
     with pytest.raises(ValueError, match="no concept"):
         per_instance_table([])
+
+
+# ---------------------------------------------------------------------------
+# Seed aggregation
+# ---------------------------------------------------------------------------
+
+
+def _seed_table(rhos: list[float], stage: str = "S2"):
+    import polars as pl
+
+    return pl.DataFrame(
+        {
+            "stage": [stage] * len(rhos),
+            "concept": [f"c{i}" for i in range(len(rhos))],
+            "tree_features": ["x"] * len(rhos),
+            "spearman": rhos,
+            "pearson": rhos,
+            "n_sessions": [600] * len(rhos),
+            "passes": [False] * len(rhos),
+        }
+    )
+
+
+def test_sign_consistency_separates_a_finding_from_noise() -> None:
+    """A mean near zero with a flipping sign is noise; a stable sign is a result."""
+    from funnel_shap.explain.per_instance_h4 import aggregate_over_seeds
+
+    aggregated = aggregate_over_seeds(
+        {
+            7: _seed_table([-0.20, 0.10]),
+            17: _seed_table([-0.30, -0.10]),
+            42: _seed_table([-0.15, 0.20]),
+        }
+    )
+    rows = {r["concept"]: r for r in aggregated.to_dicts()}
+
+    assert rows["c0"]["sign_consistent"] is True
+    assert rows["c0"]["rho_mean"] < 0
+    assert rows["c1"]["sign_consistent"] is False
+
+
+def test_aggregation_reports_spread_not_just_mean() -> None:
+    from funnel_shap.explain.per_instance_h4 import aggregate_over_seeds
+
+    aggregated = aggregate_over_seeds({7: _seed_table([0.1]), 17: _seed_table([0.5])})
+    row = aggregated.to_dicts()[0]
+
+    assert row["rho_min"] == pytest.approx(0.1)
+    assert row["rho_max"] == pytest.approx(0.5)
+    assert row["rho_std"] > 0
+    assert row["n_seeds"] == 2
+
+
+def test_empty_seed_set_is_rejected() -> None:
+    from funnel_shap.explain.per_instance_h4 import aggregate_over_seeds
+
+    with pytest.raises(ValueError, match="no seed results"):
+        aggregate_over_seeds({})
