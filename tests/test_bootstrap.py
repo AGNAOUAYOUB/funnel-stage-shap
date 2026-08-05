@@ -79,6 +79,29 @@ def test_paired_diff_of_identical_models_is_zero(imbalanced_data) -> None:
     assert res.ci_high == pytest.approx(0.0)
 
 
+def test_multi_matches_per_metric_calls(imbalanced_data) -> None:
+    """Sharing one draw across metrics must not change any interval."""
+    from funnel_shap.stats.bootstrap import bootstrap_ci_multi
+
+    y, strong, _ = imbalanced_data
+    metrics = {"pr_auc": average_precision_score, "roc_auc": roc_auc_score}
+
+    together = bootstrap_ci_multi(y, strong, metrics, n_resamples=2000, seed=7)
+    for name, fn in metrics.items():
+        alone = bootstrap_ci(y, strong, fn, n_resamples=2000, seed=7)
+        assert together[name].point == pytest.approx(alone.point)
+        assert together[name].ci_low == pytest.approx(alone.ci_low)
+        assert together[name].ci_high == pytest.approx(alone.ci_high)
+
+
+def test_multi_rejects_empty_metric_set(imbalanced_data) -> None:
+    from funnel_shap.stats.bootstrap import bootstrap_ci_multi
+
+    y, strong, _ = imbalanced_data
+    with pytest.raises(ValueError, match="no metrics"):
+        bootstrap_ci_multi(y, strong, {}, n_resamples=2000)
+
+
 def test_paired_diff_is_tighter_than_differencing_independent_cis(imbalanced_data) -> None:
     """Sharing resample indices is what buys the power; verify it actually does."""
     y, strong, weak = imbalanced_data

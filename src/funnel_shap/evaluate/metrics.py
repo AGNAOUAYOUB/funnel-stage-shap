@@ -28,7 +28,7 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 
-from ..stats.bootstrap import BootstrapResult, bootstrap_ci
+from ..stats.bootstrap import BootstrapResult, bootstrap_ci_multi
 
 #: Threshold-free metrics, safe to bootstrap directly on scores.
 METRIC_FUNCTIONS: dict[str, Callable[[np.ndarray, np.ndarray], float]] = {
@@ -234,10 +234,12 @@ def evaluate_predictions(
 
     intervals: dict[str, BootstrapResult] = {}
     if with_intervals:
-        for name, fn in METRIC_FUNCTIONS.items():
-            intervals[name] = bootstrap_ci(
-                y_true, y_prob, fn, n_resamples=n_resamples, alpha=alpha, seed=seed
-            )
+        # One shared set of resamples for all three metrics: three times faster
+        # than a call per metric, and the intervals then describe the same
+        # resampled populations.
+        intervals = bootstrap_ci_multi(
+            y_true, y_prob, METRIC_FUNCTIONS, n_resamples=n_resamples, alpha=alpha, seed=seed
+        )
 
     return ClassificationReport(
         n=len(y_true),

@@ -120,6 +120,9 @@ def run_stage_models(
                         test_scores, prior_source=float(y[masks["train"]].mean())
                     )
 
+                    # Bootstrap CIs only on the headline feature set. The
+                    # ablation ladder is reported as mean +/- std across seeds
+                    # (Sec. 10), so per-rung intervals add cost, not evidence.
                     runs.append(
                         StageRun(
                             stage=stage,
@@ -131,6 +134,7 @@ def run_stage_models(
                             test=evaluate_predictions(
                                 y[masks["test"]], test_scores, threshold=threshold,
                                 n_resamples=n_resamples, seed=seed,
+                                with_intervals=feature_set == "full",
                             ),
                             test_scores=test_scores,
                             y_test=y[masks["test"]],

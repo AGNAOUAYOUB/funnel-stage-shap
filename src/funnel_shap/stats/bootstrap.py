@@ -93,6 +93,63 @@ def bootstrap_ci(
     )
 
 
+def bootstrap_ci_multi(
+    y_true: np.ndarray,
+    y_score: np.ndarray,
+    metrics: dict[str, Metric],
+    *,
+    n_resamples: int = 2000,
+    alpha: float = 0.05,
+    seed: int = 42,
+) -> dict[str, BootstrapResult]:
+    """CIs for several metrics, drawing each resample **once**.
+
+    Calling :func:`bootstrap_ci` per metric redraws the indices every time, so
+    reporting three metrics costs three times the resampling for no extra
+    information. Sharing the draw is both faster and slightly more correct: all
+    three intervals then describe the same resampled populations, so they can be
+    read against one another rather than as three independent experiments.
+    """
+    if n_resamples < 2000:
+        raise ValueError("protocol Sec. 4.2 requires >=2000 resamples")
+    if not metrics:
+        raise ValueError("no metrics given")
+
+    y_true = np.asarray(y_true).ravel()
+    y_score = np.asarray(y_score).ravel()
+    rng = np.random.default_rng(seed)
+
+    points = {name: float(fn(y_true, y_score)) for name, fn in metrics.items()}
+    draws: dict[str, list[float]] = {name: [] for name in metrics}
+
+    for _ in range(n_resamples):
+        idx = _stratified_indices(y_true, rng)
+        resampled_true = y_true[idx]
+        resampled_score = y_score[idx]
+        for name, fn in metrics.items():
+            try:
+                draws[name].append(float(fn(resampled_true, resampled_score)))
+            except ValueError:
+                continue
+
+    results: dict[str, BootstrapResult] = {}
+    for name in metrics:
+        values = draws[name]
+        if not values:
+            raise RuntimeError(f"no bootstrap resample produced a valid value for {name!r}")
+        arr = np.asarray(values)
+        low, high = np.percentile(arr, [100 * alpha / 2, 100 * (1 - alpha / 2)])
+        results[name] = BootstrapResult(
+            point=points[name],
+            ci_low=float(low),
+            ci_high=float(high),
+            n_resamples=n_resamples,
+            n_valid=len(values),
+            alpha=alpha,
+        )
+    return results
+
+
 def paired_bootstrap_diff(
     y_true: np.ndarray,
     y_score_a: np.ndarray,
