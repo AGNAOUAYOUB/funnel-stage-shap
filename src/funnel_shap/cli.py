@@ -469,6 +469,71 @@ def explanation_quality(
 
 
 @app.command()
+def sequence_arm(
+    suffix: str = _SUFFIX_OPT,
+    protocol: str = "temporal",
+    seed: int = 42,
+    epochs: int = 6,
+    max_sessions: int = 60000,
+    timeshap: bool = typer.Option(True, help="Use TimeSHAP; falls back to permutation"),
+) -> None:
+    """Sequence arm: GRU + Layer 2 attribution, and the H4 comparison (Sec. 9.3, 11.2)."""
+    paths.ensure_dirs()
+
+    from .data.journey import MODELLING_STAGES
+    from .explain.run_sequence import h4_table, run_sequence_arm
+    from .explain.run_stage_shap import explain_stages, stage_importance_table
+
+    sessions = pl.read_parquet(paths.INTERIM / f"sessions_{suffix}.parquet")
+    cuts = pl.read_parquet(paths.INTERIM / f"cutpoints_{suffix}.parquet")
+
+    features = {}
+    for stage in MODELLING_STAGES:
+        path = paths.PROCESSED / f"features_{suffix}_{stage}.parquet"
+        if path.exists():
+            features[stage] = pl.read_parquet(path)
+
+    # Tree-side importance, ungrouped, so H4 can map individual features.
+    explanations = explain_stages(
+        features, suffix=suffix, protocol=protocol, seed=seed,
+        background_size=300, max_explain=800,
+    )
+    tabular = {}
+    for stage, explanation in explanations.items():
+        table = explanation.attribution.global_importance()
+        tabular[stage] = dict(zip(table["feature"], table["mean_abs_shap"], strict=True))
+
+    results = run_sequence_arm(
+        sessions, cuts, suffix=suffix, protocol=protocol, seed=seed,
+        epochs=epochs, max_sessions=max_sessions,
+        use_timeshap=timeshap, tabular_importance=tabular,
+    )
+    if not results:
+        raise typer.BadParameter("no stage produced a sequence model")
+
+    table = h4_table(results)
+    table.write_csv(paths.TABLES / f"h4_cross_paradigm_{suffix}.csv")
+
+    typer.echo("")
+    for stage, r in results.items():
+        typer.echo(
+            f"{stage}: GRU test PR-AUC {r.test_pr_auc:.4f} "
+            f"(n_train={r.n_train:,}, n_test={r.n_test:,})"
+        )
+        typer.echo(f"     {r.attribution.summary()}")
+        if r.h4_spearman is not None:
+            verdict = "PASS" if r.h4_spearman > 0.6 else "FAIL"
+            typer.echo(
+                f"     H4 Spearman vs TreeSHAP {r.h4_spearman:+.3f} "
+                f"over {r.h4_n_concepts} concepts: {verdict}"
+            )
+    typer.echo("")
+    typer.echo(f"-> {paths.TABLES / f'h4_cross_paradigm_{suffix}.csv'}")
+
+    _ = stage_importance_table
+
+
+@app.command()
 def check_config(path: Path) -> None:
     """Validate a run YAML against the protocol schema (Appendix A)."""
     config = load_config(path)
