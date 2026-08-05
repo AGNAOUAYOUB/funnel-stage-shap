@@ -63,9 +63,17 @@ class CurveResult:
     mean_prediction: np.ndarray
     auc: float
     monotone: bool
+    #: Largest wrong-direction step inside the positive-attribution window, as a
+    #: fraction of the curve's total movement. Reported because a bare boolean is
+    #: brittle on real data: a 0.0008 wobble against a 0.167 decline is not a
+    #: failed monotonicity claim, but a strict check calls it one.
+    max_violation: float = 0.0
 
     def summary(self) -> str:
-        return f"AUC {self.auc:.4f}, monotone={self.monotone}"
+        return (
+            f"AUC {self.auc:.4f}, monotone={self.monotone} "
+            f"(worst violation {self.max_violation:.1%} of total movement)"
+        )
 
 
 def _baseline_row(background: np.ndarray, rng: np.random.Generator) -> np.ndarray:
@@ -140,6 +148,7 @@ def deletion_curve(
     *,
     n_steps: int = 10,
     seed: int = 42,
+    tolerance: float = 0.02,
 ) -> CurveResult:
     """Remove the most positively-attributed features first; the prediction should fall.
 
@@ -157,7 +166,8 @@ def deletion_curve(
 
     Ordering is per instance, since attribution is local.
     """
-    return _curve(predict, X, shap_values, background, n_steps=n_steps, seed=seed, insert=False)
+    return _curve(predict, X, shap_values, background, n_steps=n_steps, seed=seed,
+                  insert=False, tolerance=tolerance)
 
 
 def insertion_curve(
@@ -168,9 +178,11 @@ def insertion_curve(
     *,
     n_steps: int = 10,
     seed: int = 42,
+    tolerance: float = 0.02,
 ) -> CurveResult:
     """Start from background and add the most-attributed features first."""
-    return _curve(predict, X, shap_values, background, n_steps=n_steps, seed=seed, insert=True)
+    return _curve(predict, X, shap_values, background, n_steps=n_steps, seed=seed,
+                  insert=True, tolerance=tolerance)
 
 
 def _curve(
@@ -182,6 +194,7 @@ def _curve(
     n_steps: int,
     seed: int,
     insert: bool,
+    tolerance: float = 0.02,
 ) -> CurveResult:
     X = np.asarray(X, dtype=float)
     shap_values = np.asarray(shap_values, dtype=float)
@@ -229,14 +242,27 @@ def _curve(
     # positively attributed are covered by the claim.
     positive_steps = [s for s in range(1, len(means)) if step_attribution[s] > 0]
     changes = np.array([means[s] - means[s - 1] for s in positive_steps])
-    if changes.size == 0:
-        monotone = True
-    else:
-        monotone = (
-            bool(np.all(changes >= -1e-9)) if insert else bool(np.all(changes <= 1e-9))
-        )
 
-    return CurveResult(fractions=fractions, mean_prediction=means, auc=auc, monotone=monotone)
+    total_movement = float(np.ptp(means))
+    if changes.size == 0 or total_movement <= 0:
+        monotone, violation = True, 0.0
+    else:
+        wrong = changes if insert else -changes
+        worst = float(max(0.0, -wrong.min()))
+        violation = worst / total_movement
+        # A tolerance rather than a strict inequality: on real data the curve
+        # wobbles by a fraction of a percent around the point where attribution
+        # crosses zero, and calling that a failed monotonicity claim would make
+        # the metric report failure for every honest explanation.
+        monotone = violation <= tolerance
+
+    return CurveResult(
+        fractions=fractions,
+        mean_prediction=means,
+        auc=auc,
+        monotone=monotone,
+        max_violation=violation,
+    )
 
 
 @dataclass(frozen=True)

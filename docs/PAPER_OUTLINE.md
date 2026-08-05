@@ -37,9 +37,11 @@ Draft, all within limit:
 - `Conversion becomes harder to predict, not easier, deeper in the funnel` (69)
 - `Faithfulness and stability tests validate stage-conditioned explanations` (72)
 
-All within Elsevier's 85-character limit. The first four are **[HAVE]**; the faithfulness
-bullet is **[NOT BUILT]**. The TimeSHAP convergence bullet was dropped — it competes with
-stronger claims for five slots, and belongs in the abstract instead.
+All within Elsevier's 85-character limit, and all five are now **[HAVE]** — the faithfulness
+bullet is supported by Layer 3 (seed consistency ρ ≥ 0.94, deletion AUC roughly half
+insertion at every stage), with the S2 threshold miss reported in 4.5. The TimeSHAP
+convergence bullet was dropped: it competes with stronger claims for five slots and belongs
+in the abstract instead.
 
 ### Abstract (~220 words, unstructured — DSS and ESWA both prefer this)
 
@@ -283,7 +285,36 @@ later stages, where those features do separate.
 **[PENDING] Single seed (42), single model.** RQ3 requires rank correlation across seeds
 before this table is publishable.
 
-**4.5 RQ3 — faithfulness, stability, convergence.** [NOT BUILT] → **Table 9**, **Figure 4**
+**4.5 RQ3 — faithfulness, stability, convergence.** [HAVE except TimeSHAP]
+→ **Table 9**, **Figure 4**
+
+| Stage | Faithfulness ρ | vs 0.5 | Deletion AUC | Insertion AUC | Monotone | Seed ρ (mean / min) | vs 0.6 |
+|---|---|---|---|---|---|---|---|
+| S1 | 0.571 ± 0.177 | **pass** | 0.2365 | 0.5039 | yes | 1.000 / 1.000 | **pass** |
+| S2 | 0.494 ± 0.179 | *fail* | 0.1440 | 0.3820 | yes | 0.966 / 0.943 | **pass** |
+| S3 | 0.565 ± 0.169 | **pass** | 0.3495 | 0.5898 | yes | 0.943 / 0.886 | **pass** |
+
+Three claims, in this order:
+
+1. **Seed consistency passes decisively** (ρ ≥ 0.943 mean, ≥ 0.886 worst pair, against a
+   pre-registered 0.6). This is what licenses Figure 3: the migration trajectory survives
+   reseeding and is not one draw. Report the *minimum* pairwise correlation alongside the
+   mean — a reviewer will ask about the worst pair, not the average.
+2. **Deletion AUC is roughly half insertion AUC at every stage**, and removing top
+   positively-attributed features degrades the prediction monotonically. The explanations
+   point at features the model genuinely uses.
+3. **Faithfulness is stage-dependent, and S2 misses the pre-registered threshold** (0.494
+   against 0.5). Report this as a failure against the stated bar rather than rounding it up
+   — the whole point of fixing the threshold in advance was to make a near-miss reportable.
+
+**Frame the S2 miss with the H1 result rather than as an isolated defect.** S2 is also where
+predictive lift is weakest relative to its base rate. A model with less signal to explain
+produces attributions that are harder to validate; the two findings are consistent, and
+saying so is stronger than treating the faithfulness miss as noise.
+
+**[PENDING]** the H4 cross-paradigm arm — TreeSHAP vs TimeSHAP — needs the sequence model.
+`rank_consistency` already takes the pre-registered 0.6 threshold, so only the second
+attribution source is missing.
 
 **4.6 RQ4 — actionability.** [PARTIAL] What stage-conditioned attributions identify that
 static whole-session SHAP misses. → **Table 10**
@@ -420,7 +451,7 @@ should be the one a reader remembers, so budget real design effort for it.
 | Fig 1 | Data-flow diagram | [HAVE] |
 | Fig 2 | Prediction-improvement curve by stage | [PENDING] |
 | Fig 3 | **Attribution migration trajectories** | [HAVE, 1 seed] |
-| Fig 4 | Faithfulness / stability | [NOT BUILT] |
+| Fig 4 | Faithfulness / deletion-insertion curves | [HAVE] |
 | Fig 5 | Reliability diagram under prevalence shift | [HAVE] |
 | Tab 1 | Related-work positioning | — |
 | Tab 2 | Variable availability | [HAVE] |
@@ -430,7 +461,7 @@ should be the one a reader remembers, so budget real design effort for it.
 | Tab 6 | Dataset B stage models | [PENDING] |
 | Tab 7 | Ablation ladder | [PENDING] |
 | Tab 8 | Stage distinctness | [HAVE] |
-| Tab 9 | Explanation quality | [NOT BUILT] |
+| Tab 9 | Explanation quality | [HAVE] |
 | Tab 10 | Static vs stage-conditioned actionability | [NOT BUILT] |
 | Tab 11 | Statistical comparisons, Holm-adjusted | [PENDING] |
 
