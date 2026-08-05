@@ -541,6 +541,27 @@ def figures(suffix: str = _SUFFIX_OPT) -> None:
     from .report.figures import build_all
 
     built = build_all(suffix)
+
+    # Figure 5 needs two calibration variants of the same model, so it is built
+    # here rather than from a stored table: the pre-A18 scores exist only as a
+    # deliberate re-run.
+    from .data.ingest import load_dataset_a
+    from .models.run_baselines import run_dataset_a_baselines
+    from .report.figures import figure_5_reliability
+
+    try:
+        fixed = run_dataset_a_baselines(
+            load_dataset_a(), models=("lightgbm",), seeds=(7,),
+            calibration_source="train_slice", n_resamples=2000,
+        )[0]
+        old = run_dataset_a_baselines(
+            load_dataset_a(), models=("lightgbm",), seeds=(7,),
+            calibration_source="val", n_resamples=2000,
+        )[0]
+        built["fig5"] = figure_5_reliability(fixed.y_test, old.test_scores, fixed.test_scores)
+    except FileNotFoundError:
+        typer.secho("Dataset A not present; skipping Figure 5", fg=typer.colors.YELLOW)
+
     if not built:
         raise typer.BadParameter("no input tables found; run the analysis commands first")
     for name, written in built.items():
@@ -565,6 +586,76 @@ def static_contrast(suffix: str = _SUFFIX_OPT) -> None:
     typer.echo(summarise_contrast(table))
     typer.echo("")
     typer.echo(f"-> {paths.TABLES / f'static_contrast_{suffix}.csv'}")
+
+
+@app.command()
+def per_instance_h4(
+    suffix: str = _SUFFIX_OPT,
+    protocol: str = "temporal",
+    seed: int = 42,
+    epochs: int = 4,
+    max_sessions: int = 30000,
+    n_explain: int = 400,
+) -> None:
+    """H4 per instance: do the paradigms agree about individual journeys? (A22)"""
+    paths.ensure_dirs()
+
+    from .data.journey import MODELLING_STAGES
+    from .explain.per_instance_h4 import compare_per_instance, per_instance_table, summarise
+    from .explain.run_sequence import run_sequence_arm
+    from .explain.run_stage_shap import explain_stages
+    from .explain.sequence_shap import timeshap_instance_attributions
+
+    sessions = pl.read_parquet(paths.INTERIM / f"sessions_{suffix}.parquet")
+    cuts = pl.read_parquet(paths.INTERIM / f"cutpoints_{suffix}.parquet")
+
+    features = {}
+    for stage in MODELLING_STAGES:
+        path = paths.PROCESSED / f"features_{suffix}_{stage}.parquet"
+        if path.exists():
+            features[stage] = pl.read_parquet(path)
+
+    explanations = explain_stages(
+        features, suffix=suffix, protocol=protocol, seed=seed,
+        background_size=300, max_explain=4000,
+    )
+    sequence = run_sequence_arm(
+        sessions, cuts, suffix=suffix, protocol=protocol, seed=seed,
+        epochs=epochs, max_sessions=max_sessions, n_explain=n_explain,
+        restrict_to_sessions={
+            stage: e.explained_session_ids for stage, e in explanations.items()
+        },
+    )
+
+    results = []
+    for stage, seq in sequence.items():
+        if stage not in explanations or seq.explained_X is None:
+            continue
+        per_instance = timeshap_instance_attributions(
+            seq.predict_fn, seq.explained_X, seq.train_X, seq.feature_names, seed=seed
+        )
+        tree = explanations[stage]
+        results.extend(
+            compare_per_instance(
+                tree.attribution.shap_values,
+                tree.attribution.feature_names,
+                tree.explained_session_ids,
+                per_instance,
+                seq.feature_names,
+                seq.explained_session_ids,
+                stage=stage,
+            )
+        )
+
+    if not results:
+        raise typer.BadParameter("no stage produced enough shared sessions to compare")
+
+    table = per_instance_table(results)
+    table.write_csv(paths.TABLES / f"per_instance_h4_{suffix}.csv")
+    typer.echo("")
+    typer.echo(summarise(table))
+    typer.echo("")
+    typer.echo(f"-> {paths.TABLES / f'per_instance_h4_{suffix}.csv'}")
 
 
 @app.command()

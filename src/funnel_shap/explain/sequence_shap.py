@@ -133,6 +133,38 @@ def timeshap_feature_attribution(
     )
 
 
+def timeshap_instance_attributions(
+    model,
+    X: np.ndarray,
+    background: np.ndarray,
+    feature_names: list[str],
+    *,
+    seed: int = 42,
+    nsamples: int = 320,
+) -> np.ndarray:
+    """Per-instance TimeSHAP attributions, shape ``(n_sequences, n_features)``.
+
+    The aggregate variant averages these away. Keeping them is what makes the
+    per-instance H4 comparison possible: agreement about a *global ranking* over
+    five concepts and agreement about *which journeys* a driver mattered for are
+    different claims, and only the second has enough observations to test.
+    """
+    _shim_shap_kernel_alias()
+    from timeshap.explainer import local_feat
+
+    average_event = background.mean(axis=(0, 1), keepdims=True)
+    feature_dict = {"rs": seed, "nsamples": nsamples, "feature_names": list(feature_names)}
+
+    rows = []
+    for i in range(len(X)):
+        result = local_feat(model, X[i : i + 1], feature_dict, None, None, average_event, 0)
+        frame = result[result["Feature"].isin(feature_names)]
+        ordered = frame.set_index("Feature").reindex(list(feature_names))
+        rows.append(ordered["Shapley Value"].to_numpy(dtype=float))
+
+    return np.nan_to_num(np.vstack(rows))
+
+
 def permutation_feature_attribution(
     predict,
     X: np.ndarray,

@@ -54,6 +54,10 @@ class StageExplanation:
     explained_matrix: np.ndarray = None
     background_matrix: np.ndarray = None
     estimator: object = None
+    #: Session ids of the explained rows, in the same order. Required to align
+    #: the tree and sequence arms per instance for the H4 comparison; without
+    #: them the two matrices can only be compared in aggregate.
+    explained_session_ids: list[str] = None
 
 
 def explain_stages(
@@ -104,9 +108,11 @@ def explain_stages(
 
         background = preprocess.transform(X.filter(train_mask).to_pandas())
         explain_rows = X.filter(explain_mask).to_pandas()
+        explain_ids = joined.filter(explain_mask)["session_id"].to_list()
         if len(explain_rows) > max_explain:
-            keep = rng.choice(len(explain_rows), size=max_explain, replace=False)
-            explain_rows = explain_rows.iloc[np.sort(keep)]
+            keep = np.sort(rng.choice(len(explain_rows), size=max_explain, replace=False))
+            explain_rows = explain_rows.iloc[keep]
+            explain_ids = [explain_ids[i] for i in keep]
         explain_matrix = preprocess.transform(explain_rows)
 
         from .stage_shap import stage_tree_shap
@@ -130,6 +136,7 @@ def explain_stages(
             groups=groups,
             n_train=int(train_mask.sum()),
             explained_matrix=explain_matrix,
+            explained_session_ids=explain_ids,
             background_matrix=background,
             estimator=estimator,
         )

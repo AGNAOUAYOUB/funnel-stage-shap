@@ -37,6 +37,13 @@ class SequenceStageResult:
     attribution: SequenceAttribution
     h4_spearman: float | None = None
     h4_n_concepts: int = 0
+    #: Carried so the per-instance H4 comparison can align the two arms by
+    #: session and recompute attributions without retraining.
+    explained_session_ids: list[str] | None = None
+    explained_X: np.ndarray | None = None
+    predict_fn: object = None
+    feature_names: list[str] | None = None
+    train_X: np.ndarray | None = None
 
 
 def run_sequence_arm(
@@ -52,6 +59,7 @@ def run_sequence_arm(
     n_explain: int = 150,
     use_timeshap: bool | None = None,
     tabular_importance: dict[StageName, dict[str, float]] | None = None,
+    restrict_to_sessions: dict[StageName, list[str]] | None = None,
 ) -> dict[StageName, SequenceStageResult]:
     """Train, evaluate and attribute one GRU per stage."""
     from sklearn.metrics import average_precision_score
@@ -95,7 +103,18 @@ def run_sequence_arm(
         test_scores = predict_sequences(model, batch.X[idx["test"]])
         test_score = float(average_precision_score(batch.y[idx["test"]], test_scores))
 
-        explain_idx = idx["val"][: min(n_explain, len(idx["val"]))]
+        # Prefer sessions the tree arm has already explained. Both arms
+        # subsampling independently leaves only an incidental overlap -- 49
+        # sessions at S1 on the first run -- and a per-instance comparison is
+        # only as powerful as the intersection.
+        candidates = idx["val"]
+        if restrict_to_sessions:
+            wanted = set(restrict_to_sessions.get(stage, ()))
+            if wanted:
+                preferred = [i for i in candidates if batch.session_ids[i] in wanted]
+                if len(preferred) >= 30:
+                    candidates = np.asarray(preferred)
+        explain_idx = candidates[: min(n_explain, len(candidates))]
 
         def predict(matrix, _m=model):
             return predict_sequences(_m, np.asarray(matrix, dtype=np.float32))
@@ -117,6 +136,11 @@ def run_sequence_arm(
             n_train=len(idx["train"]),
             n_test=len(idx["test"]),
             attribution=attribution,
+            explained_session_ids=[batch.session_ids[i] for i in explain_idx],
+            explained_X=batch.X[explain_idx],
+            predict_fn=predict,
+            feature_names=list(batch.feature_names),
+            train_X=batch.X[idx["train"]],
         )
 
         if tabular_importance and stage in tabular_importance:

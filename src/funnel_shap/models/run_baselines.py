@@ -57,6 +57,7 @@ def run_dataset_a_baselines(
     calibrate: str = "isotonic",
     n_resamples: int = 2000,
     calibration_fraction: float = 0.20,
+    calibration_source: str = "train_slice",
 ) -> list[BaselineRun]:
     """Fit, calibrate, threshold and evaluate every (model, seed) pair.
 
@@ -93,11 +94,22 @@ def run_dataset_a_baselines(
     # it left every model over-predicting by that same ratio (amendment A12).
     # The calibration slice is stratified across the whole training period, so
     # its base rate tracks the training months rather than one extreme one.
+    if calibration_source not in {"train_slice", "val"}:
+        raise ValueError(f"unknown calibration_source {calibration_source!r}")
+
     rng = np.random.default_rng(0)
     train_idx = np.flatnonzero(masks["train"])
-    calib_idx = _stratified_sample(y[train_idx], rng, fraction=calibration_fraction)
-    calibration_rows = train_idx[calib_idx]
-    fit_rows = np.setdiff1d(train_idx, calibration_rows, assume_unique=False)
+
+    if calibration_source == "val":
+        # The pre-A18 behaviour, retained only so the before/after reliability
+        # figure can be produced from one code path. Do not use it for results:
+        # validation is November, whose prevalence is double December's.
+        calibration_rows = np.flatnonzero(masks["val"])
+        fit_rows = train_idx
+    else:
+        calib_idx = _stratified_sample(y[train_idx], rng, fraction=calibration_fraction)
+        calibration_rows = train_idx[calib_idx]
+        fit_rows = np.setdiff1d(train_idx, calibration_rows, assume_unique=False)
 
     runs: list[BaselineRun] = []
 
