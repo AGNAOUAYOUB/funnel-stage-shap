@@ -77,6 +77,28 @@ def test_migration_reports_rq2_quantities(explained) -> None:
         assert column in table.columns
 
 
+def test_importance_uses_the_same_grouping_as_migration(explained) -> None:
+    """Per-stage rankings must be comparable with the trajectory and each other."""
+    from funnel_shap.explain.run_stage_shap import (
+        migration_table,
+        reference_groups,
+        stage_importance_table,
+    )
+
+    groups = set(reference_groups(explained))
+    importance = stage_importance_table(explained)
+    migration = migration_table(explained)
+
+    assert set(importance["group"]) <= groups
+    assert set(migration["group"]) <= groups
+    # And identical from stage to stage.
+    per_stage = [
+        set(importance.filter(pl.col("stage") == s)["group"])
+        for s in importance["stage"].unique()
+    ]
+    assert all(g == per_stage[0] for g in per_stage)
+
+
 def test_importance_shares_sum_to_one_per_stage(explained) -> None:
     from funnel_shap.explain.run_stage_shap import stage_importance_table
 

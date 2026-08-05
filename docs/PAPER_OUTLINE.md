@@ -33,13 +33,13 @@ Draft, all within limit:
 
 - `Funnel-stage SHAP reveals how purchase drivers migrate across journey stages` (76)
 - `Prefix-only features remove the label leakage common in session-level studies` (77)
-- `Faithfulness and stability tests validate stage-conditioned explanations` (72)
-- `TreeSHAP and TimeSHAP agree on stage rankings, giving convergent evidence` (73)
+- `Navigation entropy peaks mid-funnel, which static explanations average away` (75)
 - `Conversion becomes harder to predict, not easier, deeper in the funnel` (69)
+- `Faithfulness and stability tests validate stage-conditioned explanations` (72)
 
-The TimeSHAP bullet is **[PENDING]**. The last bullet now reflects the confirmed H1
-contradiction and is a stronger hook than the random-split point, which belongs in
-Discussion 5.4 rather than the highlights.
+All within Elsevier's 85-character limit. The first four are **[HAVE]**; the faithfulness
+bullet is **[NOT BUILT]**. The TimeSHAP convergence bullet was dropped — it competes with
+stronger claims for five slots, and belongs in the abstract instead.
 
 ### Abstract (~220 words, unstructured — DSS and ESWA both prefer this)
 
@@ -239,17 +239,70 @@ magnitude tighter than the sampling uncertainty of the metric, and using it as a
 turns a null into a positive. One sentence in Methods 3.8 covering this is worth including —
 it is a common error in the applied literature.
 
-**4.4 RQ2 — attribution migration.** [NOT BUILT] **The centrepiece.** Mean |SHAP| trajectory
-per feature across S1→S3, with sign changes marked. → **Figure 3**
+**4.4 RQ2 — attribution migration.** [HAVE, single seed] **The centrepiece.** Share of total
+mean-|SHAP| per correlation group across stages, interventional TreeSHAP, background 500,
+2,000 validation sessions explained per stage:
 
-Report the stage-distinctness table beside it: a migration trajectory between stages that
-share a cut-point is not a finding. Both legs are currently 0% identical (gaps of 2.49 and
-5.37 events). → **Table 8**
+| Group | S1 | S2 | S3 | Δ S1→S3 | sign reversal |
+|---|---|---|---|---|---|
+| Price (2 features) | **0.437** | 0.239 | 0.379 | −0.058 | |
+| Engagement / tempo (7) | 0.169 | **0.368** | 0.338 | **+0.169** | |
+| Products viewed (2) | 0.192 | 0.033 | 0.057 | **−0.136** | yes |
+| Navigation / entropy (6) | 0.035 | **0.224** | 0.074 | +0.039 | yes |
+| Hour of day | 0.157 | 0.125 | 0.133 | −0.024 | |
+| Weekend | 0.010 | 0.011 | 0.020 | +0.009 | yes |
+
+Three things to report, in this order:
+
+1. **Behavioural intensity gains attribution mass across the funnel** — engagement/tempo
+   doubles from 0.169 to 0.338, the largest single shift. This is H2's behaviour arm, and it
+   is supported.
+2. **Navigation entropy peaks at S2 and collapses again** (0.035 → 0.224 → 0.074). It is
+   not monotone, and a whole-session attribution would average it to a middling constant.
+   This is the clearest single piece of evidence for RQ4 and should be called out as such
+   rather than buried in the trajectory table.
+3. **Product-breadth attribution collapses** after awareness (0.192 → 0.033), with a sign
+   reversal.
+
+**H2's context arm cannot be tested on Dataset B.** Traffic source and device are absent
+from the REES46 schema (Table 2), so "context dominates early" rests on Dataset A. Price is
+the nearest available product-context proxy and does lead at S1 (0.437) before declining,
+which is weakly consistent, but it is a product attribute rather than an acquisition
+channel and must not be presented as one.
+
+Report the stage-distinctness table beside the figure: a trajectory between stages sharing a
+cut-point is not a finding. Both legs are 0% identical (gaps of 2.49 and 5.37 events).
+→ **Table 8**
+
+**Caption must state the grouping rule.** Correlation groups are fixed across stages and
+taken from S1, the coarsest, because a two-event S1 prefix makes seven engagement and
+temporal features numerically identical — their individual S1 attributions are arbitrary
+splits of one quantity. The cost is that migration *within* a merged group is invisible at
+later stages, where those features do separate.
+
+**[PENDING] Single seed (42), single model.** RQ3 requires rank correlation across seeds
+before this table is publishable.
 
 **4.5 RQ3 — faithfulness, stability, convergence.** [NOT BUILT] → **Table 9**, **Figure 4**
 
-**4.6 RQ4 — actionability.** [NOT BUILT] What stage-conditioned attributions identify that
+**4.6 RQ4 — actionability.** [PARTIAL] What stage-conditioned attributions identify that
 static whole-session SHAP misses. → **Table 10**
+
+The strongest exhibit already exists: **navigation entropy is non-monotone across stages**
+(0.035 → 0.224 → 0.074). Any whole-session attribution collapses this to a single middling
+number and would rank it as a minor, uninteresting driver. The stage-conditioned view says
+something a practitioner can act on — wandering behaviour matters specifically during
+consideration, so that is where a recommendation or filter intervention has purchase, and it
+is close to irrelevant at cart.
+
+Pair this with the A19 finding for the managerial argument: late-stage prediction is near
+chance (S3 lift 1.09), so the actionable window is **early and mid funnel**, which is the
+opposite of where cart-abandonment practice concentrates spend. Together these are the
+paper's practical contribution.
+
+**[PENDING]** the formal contrast: fit the static whole-session model on Dataset A, compute
+its SHAP ranking, and tabulate which drivers the stage view separates that the static one
+merges.
 
 **4.7 Statistical comparisons.** [PENDING] Pre-declared confirmatory pairs only, with Holm
 adjustment and effect sizes beside every p-value. → **Table 11**
@@ -267,7 +320,17 @@ prevalence is non-monotone across stages, so any PR-AUC gain is partly compositi
 that as a finding about funnel selection, not a modelling failure.
 
 **5.2 Theoretical implications.** What attribution migration says about consumer journey
-theory — whether context-then-behaviour (H2) is supported.
+theory. H2's **behaviour arm is supported** — engagement and tempo attribution doubles from
+S1 to S3 (0.169 → 0.338). Its **context arm cannot be tested on Dataset B**, since traffic
+source and device are absent from the schema, so that half rests on Dataset A.
+
+The theoretically interesting result is the one H2 did not predict: **navigation entropy is
+non-monotone**, peaking during consideration (0.035 → 0.224 → 0.074). Journey theory tends
+to treat exploration as decaying steadily as intent forms; the data says exploratory
+breadth is a *stage-specific* signal that matters where the visitor is choosing between
+alternatives and stops mattering once they have chosen. A monotone framing of the funnel
+cannot express that, which is an argument for stage conditioning as a modelling choice
+rather than merely a reporting convenience.
 
 **5.3 Practical implications.** Stage-specific intervention points. Be careful:
 **intervention recommendations require calibrated probabilities**, see 5.5.
@@ -356,7 +419,7 @@ should be the one a reader remembers, so budget real design effort for it.
 |---|---|---|
 | Fig 1 | Data-flow diagram | [HAVE] |
 | Fig 2 | Prediction-improvement curve by stage | [PENDING] |
-| Fig 3 | **Attribution migration trajectories** | [NOT BUILT] |
+| Fig 3 | **Attribution migration trajectories** | [HAVE, 1 seed] |
 | Fig 4 | Faithfulness / stability | [NOT BUILT] |
 | Fig 5 | Reliability diagram under prevalence shift | [HAVE] |
 | Tab 1 | Related-work positioning | — |

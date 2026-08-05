@@ -344,6 +344,7 @@ def stage_shap(
     model: str = "lightgbm",
     seed: int = 42,
     max_explain: int = 5000,
+    background_size: int = 2000,
 ) -> None:
     """Layer 1: stage-conditioned SHAP and the RQ2 migration table (Sec. 11.1)."""
     paths.ensure_dirs()
@@ -361,7 +362,7 @@ def stage_shap(
 
     explanations = explain_stages(
         features, suffix=suffix, protocol=protocol, model_type=model,
-        seed=seed, max_explain=max_explain,
+        seed=seed, max_explain=max_explain, background_size=background_size,
     )
     if not explanations:
         raise typer.BadParameter("no stage could be explained")

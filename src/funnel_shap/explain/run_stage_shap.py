@@ -122,31 +122,50 @@ def explain_stages(
     return out
 
 
+def reference_groups(explanations: dict[StageName, StageExplanation]) -> dict[str, list[str]]:
+    """The single grouping used at every stage, taken from the earliest one.
+
+    A trajectory is only interpretable if the thing being tracked is the same at
+    each point, so the grouping must be fixed across stages. Which stage should
+    supply it is not arbitrary: the earliest one is the **coarsest**, because
+    early prefixes are short and collapse many features onto each other. At S1 a
+    two-event prefix makes seven engagement and temporal features numerically
+    identical (amendment A8's residual note), so their individual attributions
+    there are arbitrary splits of one quantity.
+
+    Taking the finest grouping instead — from a later stage, where those
+    features separate — would restore that arbitrary split at S1 and put it
+    straight onto the figure. Taking the coarsest keeps every group meaningful
+    everywhere, at the cost of merging features at later stages that are
+    distinguishable there. That cost is real and belongs in the caption: within
+    a merged group, later-stage migration is invisible.
+    """
+    if not explanations:
+        raise ValueError("no explanations supplied")
+    return explanations[next(iter(explanations))].groups
+
+
 def migration_table(
     explanations: dict[StageName, StageExplanation], *, grouped: bool = True
 ) -> pl.DataFrame:
-    """The RQ2 trajectory table across stages.
-
-    Correlation groups are taken from the **earliest** stage present and applied
-    to all of them. Re-clustering per stage would let a group's membership
-    change between stages, so a trajectory would silently compare different
-    bundles of features at each point and any movement would be uninterpretable.
-    """
+    """The RQ2 trajectory table across stages."""
     if not explanations:
         raise ValueError("no explanations supplied")
 
     attributions = {stage: e.attribution for stage, e in explanations.items()}
     if not grouped:
         return attribution_migration(attributions)
-
-    first_stage = next(iter(explanations))
-    groups = explanations[first_stage].groups
-    return attribution_migration(attributions, groups=groups)
+    return attribution_migration(attributions, groups=reference_groups(explanations))
 
 
 def stage_importance_table(explanations: dict[StageName, StageExplanation]) -> pl.DataFrame:
-    """Per-stage grouped importance ranking (Sec. 11.1)."""
-    frames = [
-        grouped_attribution(e.attribution, e.groups) for e in explanations.values()
-    ]
+    """Per-stage grouped importance ranking (Sec. 11.1).
+
+    Uses the same reference grouping as :func:`migration_table`. Grouping each
+    stage by its own correlation structure would make the per-stage rankings
+    incomparable with the trajectory they are supposed to summarise -- and with
+    each other, which is the error this whole layer exists to avoid.
+    """
+    groups = reference_groups(explanations)
+    frames = [grouped_attribution(e.attribution, groups) for e in explanations.values()]
     return pl.concat(frames, how="diagonal")
