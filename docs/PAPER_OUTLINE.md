@@ -218,13 +218,26 @@ with a coherent mechanism is a stronger paper than a confirmed one — but only 
 pre-registration is visible, which is what Appendix A is for.
 
 **4.3 Ablation (H3).** [HAVE] Report **two** columns, not one, and say which comparison H3
-made. Against baseline aggregates alone — the comparison H3 states — entropy and click
-velocity add +0.0039 / +0.0031 / +0.0223 PR-AUC at S1/S2/S3, four to fifteen times the seed
-standard deviation. Given the temporal family they add +0.0006 / +0.0012 / **−0.0021**.
+made. All differences below carry paired-bootstrap 95% CIs, Holm-corrected across the
+nine-contrast family.
 
-H3 is **supported**, but the signal is largely *shared with* temporal features rather than
-additional to them — click velocity is events over elapsed duration, so both its
-constituents are temporal. → **Table 7**
+| Stage | +temporal vs baseline | entropy/velocity vs baseline (H3) | entropy/velocity given temporal |
+|---|---|---|---|
+| S1 | +0.0102 [+0.0045, +0.0167] | +0.0038 [−0.0002, +0.0084] | −0.0006 [−0.0017, +0.0005] |
+| S2 | +0.0120 [+0.0057, +0.0197] | +0.0035 [−0.0011, +0.0085] | +0.0007 [−0.0017, +0.0031] |
+| S3 | +0.0139 [−0.0074, +0.0370] | +0.0156 [−0.0027, +0.0346] | +0.0018 [−0.0045, +0.0085] |
+
+**H3 is not supported**: the CI covers zero at every stage. The temporal family is supported
+at S1 and S2 and undecided at S3, where 2,973 test sessions leave every interval about ±0.02
+wide. The robust finding is the **redundancy**: given temporal, entropy and velocity
+contribute nothing, and those are the only intervals narrow enough to distinguish "no
+effect" from "cannot tell". → **Table 7**
+
+**Do not report mean ± seed-std as an error bar for a between-model difference.** Seed
+spread measures refit variability on a fixed test sample; it is roughly an order of
+magnitude tighter than the sampling uncertainty of the metric, and using it as an interval
+turns a null into a positive. One sentence in Methods 3.8 covering this is worth including —
+it is a common error in the applied literature.
 
 **4.4 RQ2 — attribution migration.** [NOT BUILT] **The centrepiece.** Mean |SHAP| trajectory
 per feature across S1→S3, with sign changes marked. → **Figure 3**
@@ -280,6 +293,10 @@ worth a subsection each because both are cheap to state and hard to argue with:
 
 **5.5 Limitations and threats to validity.** Sec. 14's table, plus what we found:
 
+- **S3 is underpowered.** With 2,973 test sessions every intent-stage interval is about
+  ±0.02 wide, admitting both a meaningful gain and a meaningful loss, so no S3 contrast can
+  be decided. A sample-size limitation, not a null result; it argues for raising the
+  Dataset B subsample or widening the window beyond one month.
 - Absent variables: no search-query text in either dataset; scroll depth proxied.
 - Dataset A is non-causal by construction — whole-session aggregates, `PageValues` measured
   post-transaction.

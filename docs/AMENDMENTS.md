@@ -453,11 +453,14 @@ differences.**
 
 Dataset B (200k-user subsample, temporal split, LightGBM, five seeds):
 
+Calibrated, five seeds (ECE now 0.010–0.017, down from 0.103–0.327 uncalibrated — the A18
+correction transfers to the stage models):
+
 | Stage | N test | Prevalence | PR-AUC | **PR-AUC lift** | ROC-AUC | ECE |
 |---|---|---|---|---|---|---|
-| S1 | 38,059 | 0.073 | 0.1361 ± 0.0004 | **1.85** | 0.6432 | 0.327 |
-| S2 | 17,884 | 0.059 | 0.0882 ± 0.0006 | **1.50** | 0.6236 | 0.254 |
-| S3 | 2,973 | 0.521 | 0.5822 ± 0.0021 | **1.12** | 0.5695 | 0.103 |
+| S1 | 38,059 | 0.073 | 0.1312 ± 0.0009 | **1.79** | 0.6406 | 0.010 |
+| S2 | 17,884 | 0.059 | 0.0834 ± 0.0015 | **1.41** | 0.6198 | 0.011 |
+| S3 | 2,973 | 0.521 | 0.5681 ± 0.0041 | **1.09** | 0.5695 | 0.017 |
 
 H1 predicts PR-AUC rising monotonically from awareness to intent. Raw PR-AUC does rise
 (0.134 to 0.581), but **that is entirely prevalence**: chance-level PR-AUC equals the base
@@ -484,7 +487,59 @@ opposite of where cart-abandonment practice concentrates its effort.
 ROC-AUC decline survives tuning. Also calibrate the stage models — current stage ECE runs
 0.11–0.33, so their probabilities are not yet usable for RQ4.
 
-### A20. RESOLVED — H3 holds as written, but the features are redundant with temporal
+### A20b. CORRECTION — H3 is **not** supported once proper CIs are used
+
+**This supersedes the verdict in A20 below. A20 is retained to show the error.**
+
+A20 concluded H3 was supported because the entropy/velocity gain over baseline was "four to
+fifteen times the seed standard deviation". **That comparison was invalid.** Seed-to-seed
+standard deviation measures how much the *same model* moves when refitted on the *same*
+data with a different random seed. It says nothing about sampling uncertainty of the metric
+on a finite test set, which is what a difference between two models has to be judged
+against — and which is far larger. Using it as an error bar understated uncertainty by
+roughly an order of magnitude.
+
+Run through the Sec. 12 machinery — paired bootstrap on the test set, 2,000 stratified
+resamples, seed-averaged scores, Holm-corrected across the nine-contrast family:
+
+| Stage | Contrast | Δ PR-AUC | 95% CI | Verdict |
+|---|---|---|---|---|
+| S1 | +temporal vs baseline | +0.0102 | [+0.0045, +0.0167] | **excludes 0** |
+| S1 | baseline+entropy/velocity vs baseline | +0.0038 | [−0.0002, +0.0084] | includes 0 |
+| S1 | +entropy/velocity vs +temporal | −0.0006 | [−0.0017, +0.0005] | includes 0 |
+| S2 | +temporal vs baseline | +0.0120 | [+0.0057, +0.0197] | **excludes 0** |
+| S2 | baseline+entropy/velocity vs baseline | +0.0035 | [−0.0011, +0.0085] | includes 0 |
+| S2 | +entropy/velocity vs +temporal | +0.0007 | [−0.0017, +0.0031] | includes 0 |
+| S3 | +temporal vs baseline | +0.0139 | [−0.0074, +0.0370] | includes 0 |
+| S3 | baseline+entropy/velocity vs baseline | +0.0156 | [−0.0027, +0.0346] | includes 0 |
+| S3 | +entropy/velocity vs +temporal | +0.0018 | [−0.0045, +0.0085] | includes 0 |
+
+**Verdicts:**
+
+- **H3 is not supported.** The entropy/velocity gain over baseline has a CI covering zero at
+  every stage. S1 comes closest (+0.0038, upper bound of the negative side −0.0002) but does
+  not clear it.
+- **The temporal family is supported at S1 and S2**, cleanly, and not at S3 — where the test
+  set is 2,973 sessions and the interval is correspondingly wide (±0.02).
+- **The redundancy finding survives and is the robust one.** Given temporal, entropy/velocity
+  contributes −0.0006 / +0.0007 / +0.0018 with intervals tight around zero. This is the
+  strongest evidence in the family, because it is the one place the CIs are narrow enough to
+  say "nothing here" rather than "cannot tell".
+
+**Why S3 cannot decide anything.** Every S3 interval is wide enough to admit both a
+meaningful gain and a meaningful loss. With 2,973 test sessions the study is simply
+underpowered at the intent stage. That is a sample-size limitation, not a null result, and
+must be reported as such — an argument for raising the Dataset B subsample (A15) or widening
+the window beyond one month (A17).
+
+**Methodological note worth a sentence in the paper.** Reporting mean ± seed-std invites
+exactly the error made in A20: the spread looks like an error bar and is not one. Where a
+difference between models is claimed, the uncertainty must come from resampling the
+evaluation data, not from reseeding the fit.
+
+### A20. SUPERSEDED by A20b — H3 holds as written, but the features are redundant with temporal
+
+**The redundancy half of this survived; the "H3 supported" half did not. See A20b.**
 
 **The nuance is the finding. Reporting either half alone would misrepresent it.**
 
