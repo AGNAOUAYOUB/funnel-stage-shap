@@ -167,12 +167,31 @@ def ablation_groups(stage: StageName) -> dict[str, list[str]]:
     return groups
 
 
+#: The nested ladder Sec. 10 specifies: each rung adds a family to the previous.
+#: Measures each family's *marginal* contribution given everything before it.
 ABLATION_LADDER: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("baseline", (BASELINE,)),
     ("+temporal", (BASELINE, TEMPORAL)),
     ("+entropy_velocity", (BASELINE, TEMPORAL, ENTROPY_VELOCITY)),
     ("full", (BASELINE, TEMPORAL, ENTROPY_VELOCITY, COMPOSITE)),
 )
+
+#: H3 states that navigation-entropy and click-velocity features "carry
+#: non-trivial attribution **beyond baseline aggregate features**". In the
+#: nested ladder they are added *after* the temporal family, so the ladder
+#: measures their contribution given temporal -- a different and much harsher
+#: question, because click velocity is events over elapsed duration and so
+#: largely re-expresses information the temporal family already carries.
+#:
+#: Testing H3 as written needs the direct contrast below. Reporting only the
+#: nested rung would reject H3 on a comparison the hypothesis did not make.
+H3_CONTRAST: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("baseline", (BASELINE,)),
+    ("baseline+entropy_velocity", (BASELINE, ENTROPY_VELOCITY)),
+)
+
+#: Every named feature set the runner accepts.
+ALL_FEATURE_SETS: dict[str, tuple[str, ...]] = dict(ABLATION_LADDER) | dict(H3_CONTRAST)
 
 
 def availability_by_stage() -> pl.DataFrame:

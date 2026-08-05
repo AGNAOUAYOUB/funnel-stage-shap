@@ -32,7 +32,7 @@ from ..data.journey import MODELLING_STAGES, StageName
 from ..data.splits import load_split
 from ..evaluate.calibration import correct_prior_shift
 from ..evaluate.metrics import ClassificationReport, evaluate_predictions, select_threshold
-from ..features.dictionary import ABLATION_LADDER, FEATURE_DICTIONARY, feature_names
+from ..features.dictionary import ALL_FEATURE_SETS, FEATURE_DICTIONARY, feature_names
 from ..seeds import SEEDS, set_global_seed
 from .baselines import build_pipeline
 
@@ -77,7 +77,10 @@ def run_stage_models(
 ) -> list[StageRun]:
     """Fit and evaluate a model per (stage, model, seed, feature set)."""
     split = load_split(suffix, protocol)
-    ladder = dict(ABLATION_LADDER)
+    ladder = ALL_FEATURE_SETS
+    unknown = set(feature_sets) - set(ladder)
+    if unknown:
+        raise ValueError(f"unknown feature sets {sorted(unknown)}; expected {sorted(ladder)}")
     runs: list[StageRun] = []
 
     for stage in MODELLING_STAGES:

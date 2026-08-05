@@ -444,19 +444,20 @@ calibration set is drawn from a representative period, post-hoc prior correction
 unnecessary and harmful. It is retained in the codebase for the Dataset B arm, where the
 temporal boundary may induce genuine shift.
 
-### A19. OPEN — the stage improvement curve contradicts H1 (Sec. 9.2, 10, RQ1)
+### A19. CONFIRMED ACROSS SEEDS — the stage improvement curve contradicts H1 (Sec. 9.2, 10, RQ1)
 
-**Preliminary. LightGBM, default hyperparameters, no Optuna tuning yet (Sec. 9.5), stage
-models uncalibrated. Do not write this into the paper until the tuned, multi-seed run
-confirms it.**
+**Still untuned (Sec. 9.5 Optuna pending) and the stage models are uncalibrated, so treat
+the absolute levels as provisional. The *direction* is now robust: seed-to-seed standard
+deviation is 0.0002–0.0030, one to two orders of magnitude smaller than the between-stage
+differences.**
 
-First stage-model run on Dataset B (200k-user subsample, temporal split, seed 7):
+Dataset B (200k-user subsample, temporal split, LightGBM, five seeds):
 
 | Stage | N test | Prevalence | PR-AUC | **PR-AUC lift** | ROC-AUC |
 |---|---|---|---|---|---|
-| S1 | 38,059 | 0.073 | 0.134 | **1.83** | 0.640 |
-| S2 | 17,884 | 0.059 | 0.089 | **1.52** | 0.616 |
-| S3 | 2,973 | 0.521 | 0.581 | **1.11** | 0.566 |
+| S1 | 38,059 | 0.073 | 0.1340 ± 0.0002 | **1.83** | 0.6412 |
+| S2 | 17,884 | 0.059 | 0.0880 ± 0.0015 | **1.49** | 0.6145 |
+| S3 | 2,973 | 0.521 | 0.5797 ± 0.0030 | **1.11** | 0.5688 |
 
 H1 predicts PR-AUC rising monotonically from awareness to intent. Raw PR-AUC does rise
 (0.134 to 0.581), but **that is entirely prevalence**: chance-level PR-AUC equals the base
@@ -479,9 +480,56 @@ worth reporting rather than a failure to explain away. It also sharpens RQ4: if 
 prediction is near-chance, the actionable intervention window is *early*, which is the
 opposite of where cart-abandonment practice concentrates its effort.
 
-**Before claiming any of this**: run the Optuna-tuned models (Sec. 9.5), all five seeds with
-CIs, and confirm the ROC-AUC decline survives. Also calibrate the stage models — current
-stage ECE runs 0.11–0.33, so their probabilities are not yet usable for RQ4.
+**Before claiming any of this**: run the Optuna-tuned models (Sec. 9.5) and confirm the
+ROC-AUC decline survives tuning. Also calibrate the stage models — current stage ECE runs
+0.11–0.33, so their probabilities are not yet usable for RQ4.
+
+### A20. OPEN — H3 is not supported by the nested ladder, and the ladder is the wrong test
+
+**Both halves of this matter. Do not report the first without the second.**
+
+Ablation on Dataset B, five seeds, marginal PR-AUC contribution of each family:
+
+| Stage | baseline | +temporal | +entropy/velocity | full |
+|---|---|---|---|---|
+| S1 | 0.1241 | 0.1346 (**+0.0105**) | 0.1340 (−0.0006) | 0.1340 (+0.0000) |
+| S2 | 0.0752 | 0.0871 (**+0.0118**) | 0.0869 (−0.0001) | 0.0880 (+0.0010) |
+| S3 | 0.5606 | 0.5787 (**+0.0181**) | 0.5794 (+0.0008) | 0.5797 (+0.0003) |
+
+The temporal family contributes substantially and consistently at every stage, far beyond
+seed noise. Navigation entropy and click velocity contribute **essentially nothing** given
+temporal — twice slightly negative — and the purchase-intent composite adds nothing either.
+
+**But the nested ladder does not test H3 as written.** H3 claims these features "carry
+non-trivial attribution **beyond baseline aggregate features**". The ladder adds them
+*after* the temporal family, so it measures their contribution given temporal — a much
+harsher question, and one H3 never asked. Click velocity is events divided by elapsed prefix
+duration, so it largely re-expresses what the temporal family already encodes; near-zero
+marginal contribution given temporal is close to arithmetically expected.
+
+A `baseline+entropy_velocity` contrast has been added to test H3 literally, and is running.
+Three possible outcomes, all reportable:
+
+1. Entropy/velocity beats baseline alone but adds nothing over temporal → H3 holds as
+   written, but the features are *redundant with* temporal rather than novel. That is the
+   most likely outcome and the most interesting one to write up.
+2. It beats baseline and adds over temporal → H3 holds outright.
+3. It does not beat baseline either → H3 is rejected cleanly.
+
+**Reporting requirement.** Whichever way it lands, report both the nested ladder and the
+direct contrast, and say which one the hypothesis addressed. Reporting only the ladder would
+reject H3 on a comparison it did not make; reporting only the contrast would hide that the
+gain is not additive with temporal.
+
+### A21. LightGBM's `subsample` was silently inert (Sec. 6.2)
+
+**Fixed.** `subsample=0.9` has no effect unless `subsample_freq > 0`, and it defaults to 0.
+Bagging was therefore disabled, removing the main source of seed-to-seed variation: S1's
+baseline rung reported a standard deviation of exactly 0.0000 across five seeds.
+
+This understated the reported ± std, which Sec. 6.2 relies on to represent run-to-run
+variability. `subsample_freq=1` is now set alongside `subsample`. All Dataset B stage
+numbers are being regenerated; results predating this fix have artificially tight spreads.
 
 ### A9. Python 3.13 is present on the machine; the project pins 3.11 (Sec. 4)
 

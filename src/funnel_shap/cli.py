@@ -282,7 +282,14 @@ def stage_models(
 
     chosen_models = tuple(m.strip() for m in models.split(",") if m.strip())
     chosen_seeds = tuple(int(s) for s in seeds.split(",") if s.strip()) or SEEDS
-    feature_sets = ("baseline", "+temporal", "+entropy_velocity", "full") if ablation else ("full",)
+    # The nested ladder plus the direct H3 contrast, which the ladder does not
+    # test: it adds entropy/velocity after temporal, whereas H3 compares them to
+    # baseline alone.
+    feature_sets = (
+        ("baseline", "+temporal", "+entropy_velocity", "full", "baseline+entropy_velocity")
+        if ablation
+        else ("full",)
+    )
 
     features = {}
     for stage in MODELLING_STAGES:

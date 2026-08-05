@@ -113,11 +113,16 @@ def build_model(
     if model_type == "lightgbm":
         from lightgbm import LGBMClassifier
 
+        # LightGBM ignores `subsample` unless `subsample_freq > 0`. Left at its
+        # default of 0 the bagging fraction is silently inert, which removes the
+        # main source of seed-to-seed variation and makes the reported +/- std
+        # across seeds an understatement of real variability (Sec. 6.2).
         return LGBMClassifier(
             n_estimators=params.pop("n_estimators", 800),
             learning_rate=params.pop("learning_rate", 0.03),
             num_leaves=params.pop("num_leaves", 63),
             subsample=params.pop("subsample", 0.9),
+            subsample_freq=params.pop("subsample_freq", 1),
             colsample_bytree=params.pop("colsample_bytree", 0.9),
             is_unbalance=class_weight,
             random_state=seed,

@@ -100,6 +100,21 @@ def test_ablation_ladder_is_nested() -> None:
         seen = current
 
 
+def test_h3_contrast_omits_temporal() -> None:
+    """H3 compares entropy/velocity to *baseline*, not to baseline+temporal.
+
+    The nested ladder adds them after temporal, so it answers a harsher
+    question. Rejecting H3 on the ladder alone would test a comparison the
+    hypothesis never made.
+    """
+    from funnel_shap.features.dictionary import ALL_FEATURE_SETS, H3_CONTRAST, TEMPORAL
+
+    contrast = dict(H3_CONTRAST)
+    assert TEMPORAL not in contrast["baseline+entropy_velocity"]
+    assert set(contrast["baseline"]).issubset(contrast["baseline+entropy_velocity"])
+    assert "baseline+entropy_velocity" in ALL_FEATURE_SETS
+
+
 # ---------------------------------------------------------------------------
 # Feature semantics
 # ---------------------------------------------------------------------------
