@@ -68,9 +68,9 @@ def test_family_covers_every_declared_contrast_at_every_stage() -> None:
     assert set(frame["stage"]) == {"S1", "S3"}
 
 
-def test_effect_sizes_and_cis_are_reported(frame_cache={}) -> None:
+def test_effect_sizes_and_cis_are_reported() -> None:
     """Sec. 12: effect sizes and CIs, not bare p-values."""
-    frame = frame_cache.setdefault("f", run_stage_comparisons(_make_runs()))
+    frame = run_stage_comparisons(_make_runs())
 
     for column in ("pr_auc_diff", "ci_low", "ci_high", "excludes_zero"):
         assert column in frame.columns
