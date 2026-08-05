@@ -636,6 +636,46 @@ and with A19: stages with weaker signal produce explanations that are both less 
 less reproducible across paradigms. Three independent measurements pointing the same way is
 worth a paragraph in the discussion.
 
+### A23. Per-instance H4: aggregate convergence does not survive to individual cases
+
+**The strongest result in the RQ3 section, and it required the better test to see.**
+
+A22 flagged the pre-registered H4 as underpowered — a Spearman over four or five concepts.
+The per-instance version asks instead: *for a given driver, do the two paradigms agree about
+which journeys it mattered for?* Each correlation is computed across 534–600 shared sessions
+rather than across five concepts.
+
+| Stage | Aggregate H4 (5 concepts) | **Per-instance mean ρ** | Sessions |
+|---|---|---|---|
+| S1 | +0.200 | **+0.100** | 534 |
+| S2 | +0.500 | **−0.151** | 600 |
+| S3 | +0.600 | **+0.276** | 600 |
+
+**Zero of fourteen (stage, concept) pairs clear the 0.6 threshold.** Overall mean ρ = 0.073.
+
+**The finding is the divergence between the two rows.** At S2 the aggregate test reports
++0.500 — respectable-looking, near the threshold — while per-instance agreement is
+*negative*. The two paradigms produce broadly similar average rankings there while actively
+disagreeing about which individual visitors each driver mattered for. Aggregate convergent
+validity does not imply agreement about individual cases, and for anyone acting on a
+specific visitor's explanation, only the second matters.
+
+This reframes H4 rather than merely failing it. The pre-registered version asked the easier
+question, and would have been passed at S3 (+0.600, exactly at threshold) on evidence that
+does not survive contact with individual journeys.
+
+**S2 is now flagged by four independent measurements**: weakest predictive lift (A19), the
+only faithfulness threshold miss (0.494 vs 0.5), lowest per-instance cross-paradigm
+agreement, and here the only *negative* one. Consideration is the stage where this
+framework's explanations are least trustworthy, and the paper should say so plainly rather
+than reporting stage-averaged explanation quality.
+
+**Methodological note.** The first run had an incidental overlap of 49 sessions at S1
+because both arms subsampled validation independently. The sequence arm now preferentially
+explains sessions the tree arm already explained, making the intersection deliberate. The
+conclusion was unchanged (mean ρ 0.085 then, 0.073 now) but 49 sessions would not have been
+reportable.
+
 ### A9. Python 3.13 is present on the machine; the project pins 3.11 (Sec. 4)
 
 **Decision.** The project venv is CPython 3.11.15, provisioned by `uv`, independent of the

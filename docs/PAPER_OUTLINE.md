@@ -336,10 +336,24 @@ measurements say the same thing: **where signal is weak, explanations are less f
 less reproducible across paradigms.** That deserves its own paragraph in 5.1 — it is a
 finding about when to trust an explanation, which is the paper's subject.
 
-**[PENDING] before submission:** the per-instance convergence test. Correlating attributions
-across thousands of individual journeys, rather than across five aggregate concepts, is both
-better powered and a stronger reading of convergent validity. Report it alongside the
-pre-registered version, not instead of it.
+**Per-instance convergence.** [HAVE] Report this beside the pre-registered version — the gap
+between them is the finding.
+
+| Stage | Aggregate ρ (5 concepts) | **Per-instance mean ρ** | Sessions |
+|---|---|---|---|
+| S1 | +0.200 | **+0.100** | 534 |
+| S2 | +0.500 | **−0.151** | 600 |
+| S3 | +0.600 | **+0.276** | 600 |
+
+Zero of fourteen (stage, concept) pairs clear 0.6; overall mean ρ = 0.073.
+
+**At S2 the aggregate test reports +0.500 while per-instance agreement is negative.** The
+paradigms produce similar average rankings there while actively disagreeing about which
+visitors each driver mattered for. **Aggregate convergent validity does not imply agreement
+about individual cases** — and for anyone acting on a specific visitor's explanation, only
+the second matters. This is a claim about how convergent validity should be tested in XAI
+generally, not only about this dataset, and belongs in 5.4 (methodological implications) as
+well as here.
 
 **4.6 RQ4 — actionability.** [PARTIAL] What stage-conditioned attributions identify that
 static whole-session SHAP misses. → **Table 10**
@@ -418,6 +432,14 @@ different draw. State that — it is what makes the comparison interpretable.
 ---
 
 ## 5. Discussion (~2,000 words) — protocol Sec. 11.3, 14
+
+**5.0 The S2 result deserves its own subsection.** Four independent measurements converge on
+consideration being the stage where this framework's explanations are least trustworthy:
+weakest predictive lift (1.41), the only faithfulness threshold miss (0.494 vs 0.5), the
+lowest aggregate cross-paradigm agreement, and the only *negative* per-instance agreement
+(−0.151). Reporting stage-averaged explanation quality would hide all four. The transferable
+claim — **explanation quality tracks predictive signal, so validate explanations per stage
+rather than per model** — is arguably the most portable thing in the paper.
 
 **5.1 Answering the research questions.** One subsection per RQ, each stating whether the
 hypothesis held. **Write the H1 discussion now, because the data already complicates it:**
