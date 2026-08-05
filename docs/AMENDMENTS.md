@@ -636,9 +636,41 @@ and with A19: stages with weaker signal produce explanations that are both less 
 less reproducible across paradigms. Three independent measurements pointing the same way is
 worth a paragraph in the discussion.
 
-### A23. Per-instance H4: aggregate convergence does not survive to individual cases
+### A23b. CORRECTION — the S2 negative agreement does not survive reseeding
 
-**The strongest result in the RQ3 section, and it required the better test to see.**
+**A23 below reported per-instance agreement from a single seed and drew a stage-specific
+conclusion from it. Five seeds retract that conclusion. A23 is kept so the error is visible.**
+
+| Stage | Single seed (42) | **Five seeds, mean** | Concepts sign-stable |
+|---|---|---|---|
+| S1 | +0.100 | **+0.179** | 1 of 4 |
+| S2 | **−0.151** | **−0.018** | **0 of 5** |
+| S3 | +0.276 | **+0.046** | 2 of 5 |
+
+**Only 3 of 14 (stage, concept) pairs hold a consistent sign across seeds.** S2's apparent
+negative agreement was a single-seed artefact: across five GRU initialisations the mean is
+−0.018 and *no* concept keeps its sign. The claim that the paradigms "actively disagree" at
+S2 is withdrawn.
+
+**What survives, and it is still the substantive result.** Per-instance agreement is
+near zero at every stage (+0.179, −0.018, +0.046) while the aggregate test reported +0.200,
++0.500 and +0.600 on the same models. Aggregate convergent validity does not imply agreement
+about individual cases — that finding is unchanged and is now properly seeded. It is simply
+a uniform absence of per-instance agreement rather than a stage-varying pattern.
+
+**Consequence for the S2 narrative.** A23 claimed four independent measurements flagged S2.
+Three do: weakest predictive lift (A19), the only faithfulness threshold miss (0.494), and
+the lowest aggregate cross-paradigm agreement. The fourth does not. The subsection proposed
+for the paper should be rewritten around three convergent signals, or dropped in favour of
+the uniform per-instance finding, which is cleaner and better supported.
+
+**Why this happened.** The GRU is small, trained for four epochs on a subsample, and its
+attributions are correspondingly unstable — seed standard deviations of 0.2–0.4 on the very
+correlations being compared. The lesson is the same one A20b taught on the tabular side:
+a quantity computed once is not evidence, and this codebase now defaults to the frozen seed
+list everywhere it reports one.
+
+### A23. SUPERSEDED by A23b — Per-instance H4 from a single seed
 
 A22 flagged the pre-registered H4 as underpowered — a Spearman over four or five concepts.
 The per-instance version asks instead: *for a given driver, do the two paradigms agree about
