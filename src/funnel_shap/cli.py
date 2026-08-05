@@ -338,6 +338,60 @@ def stage_models(
 
 
 @app.command()
+def stage_shap(
+    suffix: str = _SUFFIX_OPT,
+    protocol: str = "temporal",
+    model: str = "lightgbm",
+    seed: int = 42,
+    max_explain: int = 5000,
+) -> None:
+    """Layer 1: stage-conditioned SHAP and the RQ2 migration table (Sec. 11.1)."""
+    paths.ensure_dirs()
+
+    from .data.journey import MODELLING_STAGES
+    from .explain.run_stage_shap import explain_stages, migration_table, stage_importance_table
+
+    features = {}
+    for stage in MODELLING_STAGES:
+        path = paths.PROCESSED / f"features_{suffix}_{stage}.parquet"
+        if path.exists():
+            features[stage] = pl.read_parquet(path)
+    if not features:
+        raise typer.BadParameter(f"no feature matrices for suffix {suffix!r}")
+
+    explanations = explain_stages(
+        features, suffix=suffix, protocol=protocol, model_type=model,
+        seed=seed, max_explain=max_explain,
+    )
+    if not explanations:
+        raise typer.BadParameter("no stage could be explained")
+
+    importance = stage_importance_table(explanations)
+    importance.write_csv(paths.TABLES / f"stage_importance_{suffix}.csv")
+
+    migration = migration_table(explanations)
+    migration.write_csv(paths.TABLES / f"attribution_migration_{suffix}.csv")
+
+    typer.echo("")
+    for stage, explanation in explanations.items():
+        top = (
+            importance.filter(pl.col("stage") == stage)
+            .head(5)
+            .select(["group", "share"])
+        )
+        typer.echo(f"{stage}  (n_train={explanation.n_train:,}, "
+                   f"background={explanation.attribution.background_size}, "
+                   f"explained={explanation.attribution.n_explained})")
+        for row in top.to_dicts():
+            typer.echo(f"    {row['share']:6.3f}  {row['group']}")
+
+    reversals = migration.filter(pl.col("reversed_sign"))
+    typer.echo("")
+    typer.echo(f"sign reversals across stages: {reversals['group'].n_unique()}")
+    typer.echo(f"migration table -> {paths.TABLES / f'attribution_migration_{suffix}.csv'}")
+
+
+@app.command()
 def check_config(path: Path) -> None:
     """Validate a run YAML against the protocol schema (Appendix A)."""
     config = load_config(path)
