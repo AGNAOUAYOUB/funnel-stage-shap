@@ -186,9 +186,34 @@ Dataset A benchmark, month-ordered split, test = December, 5 seeds:
 
 → **Table 5** (Dataset A), **Table 6** (Dataset B by stage), **Figure 2** (improvement curve)
 
+Dataset A now reports pre/post calibration (Sec. 9.6), calibrated on a training-period
+slice rather than the validation month (A18):
+
+| Model | PR-AUC | ECE uncalibrated | ECE calibrated |
+|---|---|---|---|
+| CatBoost | 0.699 ± 0.006 | 0.063 | 0.018 |
+| Random Forest | 0.685 ± 0.006 | 0.096 | 0.015 |
+| LightGBM | 0.677 ± 0.008 | 0.065 | 0.026 |
+| XGBoost | 0.676 ± 0.005 | 0.036 | 0.018 |
+| Logistic Regression | 0.583 ± 0.000 | 0.203 | 0.032 |
+
 **Report the stage curve against reach and prevalence, not alone.** S2's prevalence (6.8%)
 is *below* S1's (8.8%) because early carters skip consideration. The curve is a *conditional*
 claim and must be labelled one.
+
+**Report PR-AUC lift, not raw PR-AUC, as the cross-stage comparison.** Chance-level PR-AUC
+equals the prevalence, and S3's base rate (0.52) is seven times S1's (0.073). Raw PR-AUC
+rises across stages purely because of this; the normalised curve falls. Present both columns
+side by side and explain the difference in one sentence — a reviewer who sees only the raw
+column will assume you did not notice.
+
+**H1 will likely be rejected. [PENDING confirmation]** Preliminary numbers show lift falling
+monotonically (1.83 → 1.52 → 1.11) and ROC-AUC falling with it (0.640 → 0.616 → 0.566).
+ROC-AUC is prevalence-independent, so it cannot be explained by base rates. If the tuned
+multi-seed run confirms this, restructure Section 5.1 around *why* late-stage prediction is
+near-chance rather than around a confirmed hypothesis. A rejected pre-registered hypothesis
+with a coherent mechanism is a stronger paper than a confirmed one — but only if the
+pre-registration is visible, which is what Appendix A is for.
 
 **4.3 Ablation (H3).** [PENDING] baseline → +temporal → +entropy/velocity → full.
 → **Table 7**
@@ -233,11 +258,17 @@ worth a subsection each because both are cheap to state and hard to argue with:
   in Dataset A rises from 1.6% (Feb) to 25.4% (Nov) then halves to 12.5% (Dec) — a 15×
   swing. Random splits mix these months and hide it. Our month-ordered numbers will read
   *lower* than the literature's; say why, plainly, rather than burying it.
-- **Prior-probability shift silently breaks calibration.** Calibrating on November and
-  testing on December yields ECE 0.105–0.117 across all five models. LightGBM predicts a
-  mean 0.2421 against an actual 0.1251 — ratio 1.935, almost exactly the 2.03 prevalence
-  ratio — and over-predicts in *every* reliability bin. Discrimination is untouched, since
-  ranking is invariant to monotone miscalibration. → **Figure 5** (reliability diagram)
+- **Prior-probability shift silently breaks calibration, and the fix is the calibration
+  set, not a post-hoc correction.** Calibrating on November and testing on December yielded
+  ECE 0.105–0.117 across all five models; LightGBM predicted a mean 0.2421 against an actual
+  0.1251 — ratio 1.935, almost exactly the 2.03 prevalence ratio — over-predicting in *every*
+  reliability bin. Discrimination was untouched, since ranking is invariant to monotone
+  miscalibration. Moving calibration to a training-period slice cut ECE to 0.015–0.032.
+  Notably, applying Saerens et al. (2002) EM prior correction *on top* made things worse for
+  every model: it estimated a prior of 0.1447 against a true 0.1251 and over-corrected a
+  shift that was no longer there. **Report this negative result** — it is more useful to a
+  practitioner than the positive one, because the instinct is to reach for the correction
+  rather than to fix the split. → **Figure 5** (reliability diagram, before/after)
 
 **5.5 Limitations and threats to validity.** Sec. 14's table, plus what we found:
 
