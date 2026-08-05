@@ -100,21 +100,30 @@ def timeshap_feature_attribution(
     def f(sequence: np.ndarray) -> np.ndarray:
         return np.asarray(model(sequence)).reshape(-1, 1)
 
+    # local_feat(f, data, feature_dict, entity_uuid, entity_col, baseline, pruned_idx).
+    # pruned_idx=0 means no temporal pruning: the whole prefix is explained.
+    # Pruning is a runtime optimisation for long sequences (Sec. 4.2), and our
+    # prefixes are already capped at max_len, so pruning would only discard
+    # events the tabular arm still sees and break the like-for-like comparison.
+    feature_dict = {
+        "rs": seed,
+        "nsamples": 320,
+        "feature_names": list(feature_names),
+    }
+
     contributions = []
     for i in pick:
-        sequence = X[i : i + 1]
         result = local_feat(
-            f,
-            sequence,
-            {"rs": seed, "nsamples": 320},
-            entity_uuid=None,
-            entity_col=None,
-            baseline=average_event,
+            f, X[i : i + 1], feature_dict, None, None, average_event, 0
         )
-        values = result.sort_values("Feature")["Shapley Value"].to_numpy()
-        contributions.append(values[: len(feature_names)])
+        # TimeSHAP returns one row per feature plus, when pruning is active, a
+        # synthetic "Pruned Events" row; keep only the real features.
+        frame = result[result["Feature"].isin(feature_names)]
+        ordered = frame.set_index("Feature").reindex(list(feature_names))
+        contributions.append(ordered["Shapley Value"].to_numpy(dtype=float))
 
     stacked = np.vstack(contributions)
+    stacked = np.nan_to_num(stacked)
     return SequenceAttribution(
         method="TimeSHAP",
         feature_names=list(feature_names),

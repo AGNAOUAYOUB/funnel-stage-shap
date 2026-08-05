@@ -338,8 +338,25 @@ merges.
 **4.7 Statistical comparisons.** [PENDING] Pre-declared confirmatory pairs only, with Holm
 adjustment and effect sizes beside every p-value. → **Table 11**
 
-**4.8 Sensitivity analyses.** [PENDING] Sessionisation gap 15/30/60; subsample size 200k vs
-400k; temporal vs grouped split. → Appendix.
+**4.8 Sensitivity analyses.** → Appendix C.
+
+**Sessionisation gap (Sec. 7.2 requirement).** [HAVE] The 30-minute rule is a convention, and
+the appendix should say plainly that it barely matters here:
+
+| Gap | Sessions (full) | S1 reach / prev | S2 reach / prev | S3 reach / prev |
+|---|---|---|---|---|
+| 15 min | 5,544,851 | 0.978 / 0.0864 | 0.471 / 0.0652 | 0.092 / 0.5160 |
+| 30 min | 5,366,181 | 0.979 / 0.0885 | 0.480 / 0.0683 | 0.093 / 0.5210 |
+| 60 min | 5,219,040 | 0.979 / 0.0897 | 0.487 / 0.0705 | 0.093 / 0.5248 |
+
+Halving or doubling the threshold moves the session count by ±3%, stage reach by under one
+percentage point, and stage prevalence by well under half a point — all far smaller than the
+between-stage differences the paper's claims rest on. **Say this explicitly.** The
+literature's caution about the reflexive 30-minute rule is well founded in general, and the
+useful contribution here is showing it is not load-bearing *for these conclusions*, rather
+than repeating the caution and moving on.
+
+**[PENDING]** subsample size (200k vs 400k users); temporal vs grouped split.
 
 ---
 
