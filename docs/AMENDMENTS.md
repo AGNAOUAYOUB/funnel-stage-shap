@@ -407,6 +407,82 @@ for widening Dataset B to two or three months: with a longer window the straddli
 much smaller fraction of the whole. Recommend reporting both splits side by side, with the
 retention figures visible, rather than quietly showing only the temporal result.
 
+### A18. RESOLVED — calibration moves to a training-period split (Sec. 9.6)
+
+**Decision.** Calibration is fitted on a 20% label-stratified slice carved from the
+*training* period, not on the validation month. Validation now does one job (threshold
+selection) instead of two.
+
+**Why.** Sec. 9.6 asks for "a calibration split", and the first pass reused validation for
+it. Validation is November, whose 25.4% prevalence is double December's, and A12 showed
+every model over-predicting by almost exactly that ratio. The training-period slice has
+prevalence 0.1223 against December's 0.1251 — a near-perfect match — because it is drawn
+across all training months rather than one extreme one.
+
+**Effect, measured across five models at five seeds:**
+
+| Model | PR-AUC | ECE uncalibrated | ECE calibrated | ECE + prior correction |
+|---|---|---|---|---|
+| CatBoost | 0.699 ± 0.006 | 0.063 | **0.018** | 0.033 |
+| Random Forest | 0.685 ± 0.006 | 0.096 | **0.015** | 0.016 |
+| LightGBM | 0.677 ± 0.008 | 0.065 | **0.026** | 0.039 |
+| XGBoost | 0.676 ± 0.005 | 0.036 | **0.018** | 0.021 |
+| Logistic Regression | 0.583 ± 0.000 | 0.203 | **0.032** | 0.052 |
+
+ECE falls from the 0.105–0.117 band under November calibration to **0.015–0.032** — roughly
+a sixfold improvement. PR-AUC drops slightly (LightGBM 0.710 to 0.677) because 20% of the
+training period is now held out; that is the price of a calibration set and it is worth
+paying.
+
+**The EM prior correction is implemented but not applied by default, and this is a
+finding.** `evaluate/calibration.py` implements Saerens et al. (2002), which estimates the
+shifted prior from unlabelled scores — legitimate, since it never touches test labels.
+Applied *on top of* the corrected calibration split it makes ECE **worse** for every model
+(e.g. CatBoost 0.018 to 0.033), because it estimates a prior of 0.1447 against a true 0.1251
+and over-corrects a shift that is no longer there. Report it as a negative result: once the
+calibration set is drawn from a representative period, post-hoc prior correction is
+unnecessary and harmful. It is retained in the codebase for the Dataset B arm, where the
+temporal boundary may induce genuine shift.
+
+### A19. OPEN — the stage improvement curve contradicts H1 (Sec. 9.2, 10, RQ1)
+
+**Preliminary. LightGBM, default hyperparameters, no Optuna tuning yet (Sec. 9.5), stage
+models uncalibrated. Do not write this into the paper until the tuned, multi-seed run
+confirms it.**
+
+First stage-model run on Dataset B (200k-user subsample, temporal split, seed 7):
+
+| Stage | N test | Prevalence | PR-AUC | **PR-AUC lift** | ROC-AUC |
+|---|---|---|---|---|---|
+| S1 | 38,059 | 0.073 | 0.134 | **1.83** | 0.640 |
+| S2 | 17,884 | 0.059 | 0.089 | **1.52** | 0.616 |
+| S3 | 2,973 | 0.521 | 0.581 | **1.11** | 0.566 |
+
+H1 predicts PR-AUC rising monotonically from awareness to intent. Raw PR-AUC does rise
+(0.134 to 0.581), but **that is entirely prevalence**: chance-level PR-AUC equals the base
+rate, so S3 starts from a floor of 0.52 where S1 starts from 0.073.
+
+Normalised, the curve **runs the other way**. Lift falls monotonically, 1.83 to 1.11, and
+ROC-AUC — which is prevalence-independent and so cannot be explained away this
+way — falls with it, 0.640 to 0.566. By S3 the model is barely above chance relative to its
+own base rate.
+
+This is coherent rather than anomalous. Once a visitor has carted, they convert 52% of the
+time, and what separates the converters from the abandoners is largely *unobserved* in a
+clickstream: checkout friction, payment failure, delivery cost, distraction. Browsing
+behaviour discriminates well early, when it is the only signal that differs, and poorly
+late, when everyone looks alike and the decisive factors are off-stream. S1 achieves the
+highest lift with the *fewest* features (19 against 23), which strengthens the reading.
+
+**Consequence for the paper.** H1 as stated will likely be rejected, and that is a result
+worth reporting rather than a failure to explain away. It also sharpens RQ4: if late-stage
+prediction is near-chance, the actionable intervention window is *early*, which is the
+opposite of where cart-abandonment practice concentrates its effort.
+
+**Before claiming any of this**: run the Optuna-tuned models (Sec. 9.5), all five seeds with
+CIs, and confirm the ROC-AUC decline survives. Also calibrate the stage models — current
+stage ECE runs 0.11–0.33, so their probabilities are not yet usable for RQ4.
+
 ### A9. Python 3.13 is present on the machine; the project pins 3.11 (Sec. 4)
 
 **Decision.** The project venv is CPython 3.11.15, provisioned by `uv`, independent of the

@@ -261,6 +261,68 @@ def baselines_a(
 
 
 @app.command()
+def stage_models(
+    suffix: str = _SUFFIX_OPT,
+    protocol: str = "temporal",
+    models: str = typer.Option("lightgbm", help="Comma-separated model types"),
+    seeds: str = typer.Option("", help="Comma-separated subset of the frozen seed list"),
+    ablation: bool = typer.Option(False, help="Run the full ablation ladder (Sec. 10, H3)"),
+) -> None:
+    """Fit the Dataset B stage models (run-sheet step 8, Sec. 9.2)."""
+    paths.ensure_dirs()
+
+    from .data.journey import MODELLING_STAGES
+    from .models.run_stages import (
+        ablation_table,
+        improvement_curve,
+        run_stage_models,
+        stage_results_table,
+    )
+    from .seeds import SEEDS
+
+    chosen_models = tuple(m.strip() for m in models.split(",") if m.strip())
+    chosen_seeds = tuple(int(s) for s in seeds.split(",") if s.strip()) or SEEDS
+    feature_sets = ("baseline", "+temporal", "+entropy_velocity", "full") if ablation else ("full",)
+
+    features = {}
+    for stage in MODELLING_STAGES:
+        path = paths.PROCESSED / f"features_{suffix}_{stage}.parquet"
+        if path.exists():
+            features[stage] = pl.read_parquet(path)
+    if not features:
+        raise typer.BadParameter(f"no feature matrices for suffix {suffix!r}")
+
+    runs = run_stage_models(
+        features,
+        suffix=suffix,
+        protocol=protocol,
+        models=chosen_models,
+        seeds=chosen_seeds,
+        feature_sets=feature_sets,
+    )
+    if not runs:
+        raise typer.BadParameter("no stage produced an evaluable model")
+
+    stage_results_table(runs).write_csv(paths.TABLES / f"stage_models_{suffix}_per_seed.csv")
+    curve = improvement_curve(runs)
+    curve.write_csv(paths.TABLES / f"improvement_curve_{suffix}.csv")
+
+    typer.echo("")
+    typer.echo(curve)
+    typer.secho(
+        "PR-AUC is not comparable across stages: chance level equals the prevalence. "
+        "Read pr_auc_lift_mean, and report N and reach alongside (Sec. 9.2 / amendment A2).",
+        fg=typer.colors.YELLOW,
+    )
+
+    if ablation:
+        table = ablation_table(runs)
+        table.write_csv(paths.TABLES / f"ablation_{suffix}.csv")
+        typer.echo("")
+        typer.echo(table)
+
+
+@app.command()
 def check_config(path: Path) -> None:
     """Validate a run YAML against the protocol schema (Appendix A)."""
     config = load_config(path)

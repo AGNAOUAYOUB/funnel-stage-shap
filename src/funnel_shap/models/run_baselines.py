@@ -22,6 +22,7 @@ from sklearn.calibration import CalibratedClassifierCV
 from ..data.dataset_a import prepare_dataset_a
 from ..data.schema import DATASET_A_CATEGORICAL, DATASET_A_NUMERIC
 from ..data.splits import dataset_a_split
+from ..evaluate.calibration import correct_prior_shift
 from ..evaluate.metrics import ClassificationReport, evaluate_predictions, select_threshold
 from ..seeds import SEEDS, set_global_seed
 from .baselines import BASELINE_MODELS, build_pipeline
@@ -36,6 +37,11 @@ class BaselineRun:
     test: ClassificationReport
     test_scores: np.ndarray = field(repr=False)
     y_test: np.ndarray = field(repr=False)
+    #: Sec. 9.6 requires pre/post calibration reporting.
+    test_uncalibrated: ClassificationReport | None = None
+    test_prior_corrected: ClassificationReport | None = None
+    prior_estimated: float | None = None
+    prior_calibration: float | None = None
 
 
 def _to_pandas(frame: pl.DataFrame):
@@ -50,6 +56,7 @@ def run_dataset_a_baselines(
     imbalance: str = "class_weight",
     calibrate: str = "isotonic",
     n_resamples: int = 2000,
+    calibration_fraction: float = 0.20,
 ) -> list[BaselineRun]:
     """Fit, calibrate, threshold and evaluate every (model, seed) pair.
 
@@ -79,6 +86,19 @@ def run_dataset_a_baselines(
     categorical = [c for c in DATASET_A_CATEGORICAL if c in X.columns]
 
     masks = {name: partition == name for name in ("train", "val", "test")}
+
+    # Sec. 9.6 asks for a dedicated *calibration split*. Carving it from the
+    # training period rather than reusing validation matters here: validation is
+    # November, whose 25.4% prevalence is double December's, and calibrating on
+    # it left every model over-predicting by that same ratio (amendment A12).
+    # The calibration slice is stratified across the whole training period, so
+    # its base rate tracks the training months rather than one extreme one.
+    rng = np.random.default_rng(0)
+    train_idx = np.flatnonzero(masks["train"])
+    calib_idx = _stratified_sample(y[train_idx], rng, fraction=calibration_fraction)
+    calibration_rows = train_idx[calib_idx]
+    fit_rows = np.setdiff1d(train_idx, calibration_rows, assume_unique=False)
+
     runs: list[BaselineRun] = []
 
     for model_type in models:
@@ -88,11 +108,13 @@ def run_dataset_a_baselines(
             pipeline = build_pipeline(
                 model_type, numeric, categorical, seed=seed, imbalance=imbalance
             )
-            pipeline.fit(X[masks["train"]], y[masks["train"]])
+            pipeline.fit(X.iloc[fit_rows], y[fit_rows])
+
+            raw_test = pipeline.predict_proba(X[masks["test"]])[:, 1]
 
             if calibrate != "none":
                 calibrated = CalibratedClassifierCV(pipeline, method=calibrate, cv="prefit")
-                calibrated.fit(X[masks["val"]], y[masks["val"]])
+                calibrated.fit(X.iloc[calibration_rows], y[calibration_rows])
                 scorer = calibrated
             else:
                 scorer = pipeline
@@ -103,6 +125,19 @@ def run_dataset_a_baselines(
 
             test_scores = scorer.predict_proba(X[masks["test"]])[:, 1]
 
+            # Residual shift, estimated from the test *scores* only -- never the
+            # test labels, which would defeat the single-look rule.
+            prior_calibration = float(y[calibration_rows].mean())
+            corrected, shift = correct_prior_shift(
+                test_scores, prior_source=prior_calibration
+            )
+
+            def report(scores, *, intervals=True, _seed=seed, _threshold=threshold):
+                return evaluate_predictions(
+                    y[masks["test"]], scores, threshold=_threshold,
+                    n_resamples=n_resamples, seed=_seed, with_intervals=intervals,
+                )
+
             runs.append(
                 BaselineRun(
                     model=model_type,
@@ -112,12 +147,13 @@ def run_dataset_a_baselines(
                         y[masks["val"]], val_scores, threshold=threshold,
                         n_resamples=n_resamples, seed=seed, with_intervals=False,
                     ),
-                    test=evaluate_predictions(
-                        y[masks["test"]], test_scores, threshold=threshold,
-                        n_resamples=n_resamples, seed=seed,
-                    ),
+                    test=report(test_scores),
                     test_scores=test_scores,
                     y_test=y[masks["test"]],
+                    test_uncalibrated=report(raw_test, intervals=False),
+                    test_prior_corrected=report(corrected, intervals=False),
+                    prior_estimated=shift.prior_estimated,
+                    prior_calibration=prior_calibration,
                 )
             )
 
@@ -125,15 +161,38 @@ def run_dataset_a_baselines(
     return runs
 
 
+def _stratified_sample(
+    y: np.ndarray, rng: np.random.Generator, *, fraction: float
+) -> np.ndarray:
+    """Positional indices of a label-stratified sample, so the slice keeps the base rate."""
+    picked = []
+    for label in (0, 1):
+        idx = np.flatnonzero(y == label)
+        n = max(1, int(round(len(idx) * fraction)))
+        picked.append(rng.choice(idx, size=n, replace=False))
+    return np.sort(np.concatenate(picked))
+
+
 def results_table(runs: list[BaselineRun]) -> pl.DataFrame:
     """Per-(model, seed) test metrics, long form."""
     rows = []
     for run in runs:
         row = {"model": run.model, "seed": run.seed, "threshold": run.threshold}
-        row |= {k: v for k, v in run.test.point.items()}
+        row |= dict(run.test.point)
         for name, ci in run.test.intervals.items():
             row[f"{name}_ci_low"] = ci.ci_low
             row[f"{name}_ci_high"] = ci.ci_high
+        # Sec. 9.6: pre/post calibration, plus the prior-shift diagnostics.
+        if run.test_uncalibrated is not None:
+            row["ece_uncalibrated"] = run.test_uncalibrated.point["ece"]
+            row["brier_uncalibrated"] = run.test_uncalibrated.point["brier"]
+        if run.test_prior_corrected is not None:
+            row["ece_prior_corrected"] = run.test_prior_corrected.point["ece"]
+            row["brier_prior_corrected"] = run.test_prior_corrected.point["brier"]
+            row["pr_auc_prior_corrected"] = run.test_prior_corrected.point["pr_auc"]
+        row["prior_calibration"] = run.prior_calibration
+        row["prior_estimated"] = run.prior_estimated
+        row["prevalence_test"] = run.test.prevalence
         rows.append(row)
     return pl.DataFrame(rows)
 
