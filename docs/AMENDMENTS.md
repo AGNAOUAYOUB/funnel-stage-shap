@@ -453,11 +453,11 @@ differences.**
 
 Dataset B (200k-user subsample, temporal split, LightGBM, five seeds):
 
-| Stage | N test | Prevalence | PR-AUC | **PR-AUC lift** | ROC-AUC |
-|---|---|---|---|---|---|
-| S1 | 38,059 | 0.073 | 0.1340 ± 0.0002 | **1.83** | 0.6412 |
-| S2 | 17,884 | 0.059 | 0.0880 ± 0.0015 | **1.49** | 0.6145 |
-| S3 | 2,973 | 0.521 | 0.5797 ± 0.0030 | **1.11** | 0.5688 |
+| Stage | N test | Prevalence | PR-AUC | **PR-AUC lift** | ROC-AUC | ECE |
+|---|---|---|---|---|---|---|
+| S1 | 38,059 | 0.073 | 0.1361 ± 0.0004 | **1.85** | 0.6432 | 0.327 |
+| S2 | 17,884 | 0.059 | 0.0882 ± 0.0006 | **1.50** | 0.6236 | 0.254 |
+| S3 | 2,973 | 0.521 | 0.5822 ± 0.0021 | **1.12** | 0.5695 | 0.103 |
 
 H1 predicts PR-AUC rising monotonically from awareness to intent. Raw PR-AUC does rise
 (0.134 to 0.581), but **that is entirely prevalence**: chance-level PR-AUC equals the base
@@ -484,42 +484,48 @@ opposite of where cart-abandonment practice concentrates its effort.
 ROC-AUC decline survives tuning. Also calibrate the stage models — current stage ECE runs
 0.11–0.33, so their probabilities are not yet usable for RQ4.
 
-### A20. OPEN — H3 is not supported by the nested ladder, and the ladder is the wrong test
+### A20. RESOLVED — H3 holds as written, but the features are redundant with temporal
 
-**Both halves of this matter. Do not report the first without the second.**
+**The nuance is the finding. Reporting either half alone would misrepresent it.**
 
-Ablation on Dataset B, five seeds, marginal PR-AUC contribution of each family:
+Ablation on Dataset B, five seeds, LightGBM, bagging fixed (A21):
 
-| Stage | baseline | +temporal | +entropy/velocity | full |
-|---|---|---|---|---|
-| S1 | 0.1241 | 0.1346 (**+0.0105**) | 0.1340 (−0.0006) | 0.1340 (+0.0000) |
-| S2 | 0.0752 | 0.0871 (**+0.0118**) | 0.0869 (−0.0001) | 0.0880 (+0.0010) |
-| S3 | 0.5606 | 0.5787 (**+0.0181**) | 0.5794 (+0.0008) | 0.5797 (+0.0003) |
+| Stage | baseline | +temporal | +entropy/velocity | full | baseline+entropy/velocity |
+|---|---|---|---|---|---|
+| S1 | 0.1241 | 0.1355 | 0.1361 | 0.1361 | 0.1281 |
+| S2 | 0.0774 | 0.0876 | 0.0888 | 0.0882 | 0.0806 |
+| S3 | 0.5618 | 0.5821 | 0.5800 | 0.5822 | 0.5842 |
 
-The temporal family contributes substantially and consistently at every stage, far beyond
-seed noise. Navigation entropy and click velocity contribute **essentially nothing** given
-temporal — twice slightly negative — and the purchase-intent composite adds nothing either.
+The two comparisons that matter:
 
-**But the nested ladder does not test H3 as written.** H3 claims these features "carry
-non-trivial attribution **beyond baseline aggregate features**". The ladder adds them
-*after* the temporal family, so it measures their contribution given temporal — a much
-harsher question, and one H3 never asked. Click velocity is events divided by elapsed prefix
-duration, so it largely re-expresses what the temporal family already encodes; near-zero
-marginal contribution given temporal is close to arithmetically expected.
+| Stage | entropy/velocity **vs baseline** (H3 as written) | entropy/velocity **given temporal** (the ladder) |
+|---|---|---|
+| S1 | **+0.0039** | +0.0006 |
+| S2 | **+0.0031** | +0.0012 |
+| S3 | **+0.0223** | −0.0021 |
 
-A `baseline+entropy_velocity` contrast has been added to test H3 literally, and is running.
-Three possible outcomes, all reportable:
+**H3 as written is supported.** Against baseline aggregates alone, navigation entropy and
+click velocity add 0.0039 / 0.0031 / 0.0223 PR-AUC — between roughly four and fifteen times
+the seed standard deviation (0.0003–0.0016), so not noise.
 
-1. Entropy/velocity beats baseline alone but adds nothing over temporal → H3 holds as
-   written, but the features are *redundant with* temporal rather than novel. That is the
-   most likely outcome and the most interesting one to write up.
-2. It beats baseline and adds over temporal → H3 holds outright.
-3. It does not beat baseline either → H3 is rejected cleanly.
+**But the information is almost entirely redundant with the temporal family.** Given
+temporal, the same features add 0.0006 / 0.0012 / −0.0021 — nothing, and at S3 slightly
+negative. S3 is the sharpest case: entropy/velocity is the single largest gain over baseline
+of any family (+0.0223), and is worth *less than zero* once temporal features are present.
 
-**Reporting requirement.** Whichever way it lands, report both the nested ladder and the
-direct contrast, and say which one the hypothesis addressed. Reporting only the ladder would
-reject H3 on a comparison it did not make; reporting only the contrast would hide that the
-gain is not additive with temporal.
+This is mechanically sensible rather than surprising. Click velocity is events divided by
+elapsed prefix duration; both of its constituents are temporal features. It re-expresses
+information the temporal family already carries rather than adding a new channel.
+
+**How to report it.** State H3 as supported, then immediately state the redundancy, with
+both columns side by side. The honest claim is *"entropy and velocity features carry real
+predictive signal beyond aggregate counts, but that signal is substantially shared with
+simpler temporal features rather than additional to them"* — a more precise and more useful
+result than either "supported" or "rejected".
+
+**Still to do before the paper**: back this with the Sec. 12 machinery — paired bootstrap
+PR-AUC differences with CIs and Holm correction — rather than comparing means to standard
+deviations by eye.
 
 ### A21. LightGBM's `subsample` was silently inert (Sec. 6.2)
 

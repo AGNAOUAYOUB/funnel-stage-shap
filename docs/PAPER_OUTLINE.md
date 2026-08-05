@@ -35,9 +35,11 @@ Draft, all within limit:
 - `Prefix-only features remove the label leakage common in session-level studies` (77)
 - `Faithfulness and stability tests validate stage-conditioned explanations` (72)
 - `TreeSHAP and TimeSHAP agree on stage rankings, giving convergent evidence` (73)
-- `Month-ordered splits cut benchmark PR-AUC, exposing random-split optimism` (72)
+- `Conversion becomes harder to predict, not easier, deeper in the funnel` (69)
 
-The last two are **[PENDING]** — do not submit them until the numbers exist.
+The TimeSHAP bullet is **[PENDING]**. The last bullet now reflects the confirmed H1
+contradiction and is a stronger hook than the random-split point, which belongs in
+Discussion 5.4 rather than the highlights.
 
 ### Abstract (~220 words, unstructured — DSS and ESWA both prefer this)
 
@@ -215,8 +217,14 @@ near-chance rather than around a confirmed hypothesis. A rejected pre-registered
 with a coherent mechanism is a stronger paper than a confirmed one — but only if the
 pre-registration is visible, which is what Appendix A is for.
 
-**4.3 Ablation (H3).** [PENDING] baseline → +temporal → +entropy/velocity → full.
-→ **Table 7**
+**4.3 Ablation (H3).** [HAVE] Report **two** columns, not one, and say which comparison H3
+made. Against baseline aggregates alone — the comparison H3 states — entropy and click
+velocity add +0.0039 / +0.0031 / +0.0223 PR-AUC at S1/S2/S3, four to fifteen times the seed
+standard deviation. Given the temporal family they add +0.0006 / +0.0012 / **−0.0021**.
+
+H3 is **supported**, but the signal is largely *shared with* temporal features rather than
+additional to them — click velocity is events over elapsed duration, so both its
+constituents are temporal. → **Table 7**
 
 **4.4 RQ2 — attribution migration.** [NOT BUILT] **The centrepiece.** Mean |SHAP| trajectory
 per feature across S1→S3, with sign changes marked. → **Figure 3**
