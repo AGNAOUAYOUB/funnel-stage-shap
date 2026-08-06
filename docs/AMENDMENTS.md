@@ -716,3 +716,53 @@ system 3.13.
 **Why.** The protocol pins 3.11 and several pinned libraries (notably `numpy<2`,
 `scikit-learn 1.4.x`) have no 3.13 wheels at those versions. Building on the system
 interpreter would have forced the versions off their pins.
+
+---
+
+## 2026-08-06 — Post-freeze completion of three protocol arms
+
+### A24. Hyperparameter tuning ran after the headline results; defaults stay headline (Sec. 9.5)
+
+**Decision.** The Sec. 9.5 Optuna search (TPE, 100 trials per stage, fixed spaces, lightgbm)
+was executed against the frozen temporal validation split, after the default-hyperparameter
+stage models had already opened the test partition. Tuned models were then evaluated on test
+over the same five seeds. The tuned numbers are reported as a sensitivity analysis
+(paper §4.7); the default-hyperparameter results remain the headline.
+
+**Why headline is unchanged.** Every explanation-layer artefact — SHAP attributions,
+migration, faithfulness, the sequence-arm comparison — was computed against the default
+models. Promoting tuned numbers to headline would detach the explanations from the models
+they explain, or force a full re-run of Layers 1–3 against retuned models. Tuning moved S1
+and S2 by +0.002/+0.003 (within seed noise) and S3 by +0.032; the lift ordering
+(1.81 > 1.46 > 1.15) is unchanged, so no conclusion depends on the choice.
+
+**What tuning selected.** All three stages chose the minimum tree count in the space (200)
+with heavy regularisation. The search pushed away from complexity, consistent with temporal
+drift penalising models that fit their own period too well.
+
+**Studies persist** in `experiments/optuna/` (SQLite, reopenable), summarised in
+`reports/tables/tuning_gap30s200000.csv`; tuned per-seed results in
+`stage_models_gap30s200000_tuned_per_seed.csv`.
+
+### A25. Grouped-split robustness arm executed (Sec. 7.6)
+
+**Decision.** The grouped protocol (user-partitioned, identity-clean, not time-ordered) was
+run with the headline configuration: lightgbm, defaults, five seeds, full feature set.
+Results to `stage_models_gap30s200000_grouped_per_seed.csv` and
+`improvement_curve_gap30s200000_grouped.csv`; CLI table names are now protocol-tagged so
+non-temporal runs cannot overwrite the headline tables.
+
+**Result.** Lift 1.98 → 1.53 → 1.15, monotone as on the temporal split, and uniformly higher
+— the direction temporal drift predicts. The H1 reversal is not an artefact of the temporal
+protocol.
+
+### A26. Stability arm of Layer 3 executed; previous run had claimed the column (Sec. 11.3)
+
+**Decision.** The published explanation-quality run used `--no-stability` and left the
+Lipschitz columns null while the paper text described stability as reported per stage. The
+arm has now been run (25 instances per stage, noise sd 0.05) and the table regenerated.
+
+**Result.** Max Lipschitz ratio 0.048 (S1), 0.073 (S2), 0.028 (S3); means 0.010–0.015. All
+stages stable. Faithfulness, deletion/insertion and seed-consistency values reproduced
+exactly, so the regeneration changed nothing previously reported. S2 remains the anomalous
+stage on faithfulness but is not unstable.

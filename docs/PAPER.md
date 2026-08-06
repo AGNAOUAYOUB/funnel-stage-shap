@@ -112,7 +112,7 @@ parts:
 
 The study is pre-registered. Every analytic decision was fixed before the test partition was
 opened, and each subsequent deviation is recorded with a date and rationale in a public
-amendment log (Appendix A). Twenty-three amendments were logged, several of which reverse an
+amendment log (Appendix A). Twenty-six amendments were logged, several of which reverse an
 initial decision on the basis of measurement; we regard this record as part of the
 contribution rather than an embarrassment to be hidden.
 
@@ -357,9 +357,13 @@ were fixed in advance: faithfulness correlation > 0.5, cross-paradigm Spearman >
 Five model families were evaluated on Dataset A — logistic regression, random forest (Breiman,
 2001), XGBoost (Chen & Guestrin, 2016), LightGBM (Ke et al., 2017) and CatBoost
 (Prokhorenkova et al., 2018) — and LightGBM was carried forward to the stage models.
-Hyperparameters were tuned with Optuna (Akiba et al., 2019) over fixed search spaces, using a
-held-out validation set rather than nested cross-validation, because the temporal split
-forbids shuffling folds across the time boundary. Class imbalance was handled by class
+Headline stage models use the libraries' default hyperparameters. A tuning study — Optuna
+(Akiba et al., 2019) TPE search, 100 trials per stage over fixed search spaces, scored on a
+held-out validation set rather than by nested cross-validation because the temporal split
+forbids shuffling folds across the time boundary — is reported as a robustness analysis
+(§4.7). It improves S3 and changes no conclusion; keeping defaults as the headline keeps the
+explanation layers attached to the exact models they explain. Tuning and threshold selection
+both touch the validation partition, a double use noted in §5.5. Class imbalance was handled by class
 weighting inside training folds only; SMOTE (Chawla et al., 2002) was available but not used
 in the reported runs.
 
@@ -486,11 +490,11 @@ where the visitor is choosing among alternatives and ceases to matter once they 
 
 **Table 9** and **Figure 4** report Layer 3.
 
-| Stage | Faithfulness ρ | vs 0.5 | Deletion AUC | Insertion AUC | Seed ρ (mean / worst pair) | vs 0.6 |
-|---|---|---|---|---|---|---|
-| S1 | 0.571 ± 0.177 | **pass** | 0.2365 | 0.5039 | 1.000 / 1.000 | **pass** |
-| S2 | 0.494 ± 0.179 | *fail* | 0.1440 | 0.3820 | 0.966 / 0.943 | **pass** |
-| S3 | 0.565 ± 0.169 | **pass** | 0.3495 | 0.5898 | 0.943 / 0.886 | **pass** |
+| Stage | Faithfulness ρ | vs 0.5 | Deletion AUC | Insertion AUC | Lipschitz (max / mean) | Seed ρ (mean / worst pair) | vs 0.6 |
+|---|---|---|---|---|---|---|---|
+| S1 | 0.571 ± 0.177 | **pass** | 0.2365 | 0.5039 | 0.048 / 0.015 | 1.000 / 1.000 | **pass** |
+| S2 | 0.494 ± 0.179 | *fail* | 0.1440 | 0.3820 | 0.073 / 0.013 | 0.966 / 0.943 | **pass** |
+| S3 | 0.565 ± 0.169 | **pass** | 0.3495 | 0.5898 | 0.028 / 0.010 | 0.943 / 0.886 | **pass** |
 
 **Seed consistency passes decisively** at every stage, with a worst-pair correlation of 0.886
 against a threshold of 0.6. This is what licenses Figure 3: the migration trajectory survives
@@ -502,6 +506,13 @@ at features the model genuinely uses.
 
 **Faithfulness is stage-dependent, and S2 misses the pre-registered threshold** (0.494 against
 0.5). We report this as a failure against the stated bar rather than rounding it up.
+
+**Stability passes at every stage.** The local-Lipschitz estimate (25 instances per stage,
+Gaussian input noise of sd 0.05) bounds the attribution change at a maximum ratio of 0.073
+(S2), with means near 0.01: perturbing the input moves the explanation by at most a small
+fraction of the perturbation itself. Notably, S2 — weakest on faithfulness — is not unstable;
+its explanations are consistent and robust, they are just less tethered to the model's
+actual sensitivity than at the other stages.
 
 ### 4.6 Cross-paradigm agreement (H4)
 
@@ -551,6 +562,23 @@ and leaves every conclusion intact: lift still falls monotonically (1.84, 1.49, 
 ROC-AUC with it (0.648, 0.634, 0.570). Because the sample is nested at a fixed seed, the
 400,000-user set is a strict superset of the 200,000-user set, so these differences are
 attributable to the added users rather than to a different draw.
+
+**Hyperparameter tuning.** Refitting the stage models with Optuna-selected hyperparameters
+(§3.8) moves PR-AUC by +0.002 (S1) and +0.003 (S2) — within one to two seed standard
+deviations — and by +0.032 at S3 (0.568 → 0.600, roughly eight seed standard deviations).
+The lift ordering is unchanged: 1.81, 1.46, 1.15 tuned against 1.79, 1.41, 1.09 at defaults,
+still monotonically falling. All three searches selected the minimum tree count in the space
+(200) with strong regularisation — shallow trees at S1 and S3, a slow learning rate at S2 —
+consistent with a drift-prone temporal split rewarding conservative models. That the largest
+gain lands at S3 fits the same reading: the underpowered stage benefits most from
+regularisation, and even tuned it remains the weakest stage.
+
+**Split protocol.** On the grouped split, which partitions users at random and is
+identity-clean but not time-ordered, lift falls 1.98 → 1.53 → 1.15. The monotone decline on
+which H1's rejection rests is therefore not an artefact of the temporal protocol. Grouped
+performance sits above temporal at every stage, which is what temporal drift
+predicts: a model tested on its own period's peers faces an easier problem than one tested
+on the future.
 
 **Calibration set.** Fitting the calibrator on the validation month rather than on a slice of
 the training period raises Expected Calibration Error from 0.025 to 0.118 (**Figure 5**), for
@@ -662,6 +690,12 @@ window longer than one month would reduce this fraction substantially.
 attributions carry seed standard deviations of 0.2–0.4. Conclusions from it are correspondingly
 weak, and one single-seed conclusion had to be withdrawn (A23b).
 
+**The validation partition is used twice.** Hyperparameter tuning selects among models on
+validation PR-AUC, and the operating threshold is subsequently chosen on the same partition.
+The interaction is weak — tuning optimises a threshold-free metric and thresholding is a
+downstream choice on the already-selected model — but it is a double use, and a stricter
+design would reserve a separate partition for each.
+
 **External validity.** One retailer, one market, one month. The framework is portable; these
 specific attribution trajectories are not claimed to be.
 
@@ -731,7 +765,7 @@ at cohort level.
 
 ## Appendices
 
-- **Appendix A** — Pre-registered protocol (v1.0) and the dated amendment log (23 entries).
+- **Appendix A** — Pre-registered protocol (v1.0) and the dated amendment log (26 entries).
 - **Appendix B** — Full feature dictionary.
 - **Appendix C** — Sessionisation gap and sample-size sensitivity analyses.
 - **Appendix D** — Hyperparameter search spaces and selected values.

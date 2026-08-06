@@ -158,7 +158,7 @@ their intersection, which is presently sparse in the applied literature.}
 
 The study is pre-registered. Every analytic decision was fixed before the test
 partition was opened, and each subsequent deviation is recorded with a date and
-rationale in a public amendment log (Appendix~A). Twenty-three amendments were
+rationale in a public amendment log (Appendix~A). Twenty-six amendments were
 logged, several of which reverse an initial decision on the basis of measurement;
 we regard this record as part of the contribution rather than an embarrassment to
 be hidden.
@@ -529,10 +529,15 @@ stated bar rather than rounded toward it.}
 Five model families were evaluated on Dataset~A---logistic regression, random
 forest \citep{breiman2001random}, XGBoost \citep{chen2016xgboost}, LightGBM
 \citep{ke2017lightgbm} and CatBoost \citep{prokhorenkova2018catboost}---and LightGBM
-was carried forward to the stage models. Hyperparameters were tuned with Optuna
-\citep{akiba2019optuna} over fixed search spaces, using a held-out validation set
-rather than nested cross-validation, because the temporal split forbids shuffling
-folds across the time boundary. Class imbalance was handled by class weighting
+was carried forward to the stage models. Headline stage models use the libraries'
+default hyperparameters. A tuning study---Optuna \citep{akiba2019optuna} TPE search,
+100 trials per stage over fixed search spaces, scored on a held-out validation set
+rather than by nested cross-validation because the temporal split forbids shuffling
+folds across the time boundary---is reported as a robustness analysis
+(\S\ref{sec:sensitivity}). It improves S3 and changes no conclusion; keeping
+defaults as the headline keeps the explanation layers attached to the exact models
+they explain. Tuning and threshold selection both touch the validation partition, a
+double use noted in \S\ref{sec:limitations}. Class imbalance was handled by class weighting
 inside training folds only; SMOTE \citep{chawla2002smote} was available but not used
 in the reported runs.
 
@@ -781,15 +786,16 @@ Table~\ref{tab:quality} and Figure~\ref{fig:quality} report Layer~3.
 Spearman $>0.6$) were fixed before any result was computed.}
 \label{tab:quality}
 \small
-\begin{tabular}{@{}lcccccc@{}}
+\begin{tabular}{@{}lccccccc@{}}
 \toprule
 \textbf{Stage} & \textbf{Faithfulness $\rho$} & \textbf{vs 0.5} &
 \textbf{Deletion AUC} & \textbf{Insertion AUC} &
+\textbf{Lipschitz (max / mean)} &
 \textbf{Seed $\rho$ (mean / worst)} & \textbf{vs 0.6} \\
 \midrule
-S1 & $0.571 \pm 0.177$ & \pass & 0.2365 & 0.5039 & 1.000 / 1.000 & \pass \\
-S2 & $0.494 \pm 0.179$ & \fail & 0.1440 & 0.3820 & 0.966 / 0.943 & \pass \\
-S3 & $0.565 \pm 0.169$ & \pass & 0.3495 & 0.5898 & 0.943 / 0.886 & \pass \\
+S1 & $0.571 \pm 0.177$ & \pass & 0.2365 & 0.5039 & 0.048 / 0.015 & 1.000 / 1.000 & \pass \\
+S2 & $0.494 \pm 0.179$ & \fail & 0.1440 & 0.3820 & 0.073 / 0.013 & 0.966 / 0.943 & \pass \\
+S3 & $0.565 \pm 0.169$ & \pass & 0.3495 & 0.5898 & 0.028 / 0.010 & 0.943 / 0.886 & \pass \\
 \bottomrule
 \end{tabular}
 \end{table*}
@@ -814,6 +820,14 @@ explanations point at features the model genuinely uses.
 \textbf{Faithfulness is stage-dependent, and S2 misses the pre-registered
 threshold} (0.494 against 0.5). We report this as a failure against the stated bar
 rather than rounding it up.
+
+\textbf{Stability passes at every stage.} The local-Lipschitz estimate (25 instances
+per stage, Gaussian input noise of sd 0.05) bounds the attribution change at a
+maximum ratio of 0.073 (S2), with means near 0.01: perturbing the input moves the
+explanation by at most a small fraction of the perturbation itself. Notably, S2---
+weakest on faithfulness---is not unstable; its explanations are consistent and
+robust, they are just less tethered to the model's actual sensitivity than at the
+other stages.
 
 \subsection{Cross-paradigm agreement (H4)}
 \label{sec:h4}
@@ -895,6 +909,26 @@ leaves every conclusion intact: lift still falls monotonically (1.84, 1.49, 1.10
 and ROC-AUC with it (0.648, 0.634, 0.570). Because the sample is nested at a fixed
 seed, the 400,000-user set is a strict superset of the 200,000-user set, so these
 differences are attributable to the added users rather than to a different draw.
+
+\paragraph{Hyperparameter tuning.}
+Refitting the stage models with Optuna-selected hyperparameters (\S\ref{sec:eval})
+moves PR-AUC by $+0.002$ (S1) and $+0.003$ (S2)---within one to two seed standard
+deviations---and by $+0.032$ at S3 ($0.568 \to 0.600$, roughly eight seed standard
+deviations). The lift ordering is unchanged: 1.81, 1.46, 1.15 tuned against 1.79,
+1.41, 1.09 at defaults, still monotonically falling. All three searches selected
+the minimum tree count in the space (200) with strong regularisation---shallow
+trees at S1 and S3, a slow learning rate at S2---consistent with a drift-prone
+temporal split rewarding conservative models. That the largest gain lands at S3
+fits the same reading: the underpowered stage benefits most from regularisation,
+and even tuned it remains the weakest stage.
+
+\paragraph{Split protocol.}
+On the grouped split, which partitions users at random and is identity-clean but
+not time-ordered, lift falls $1.98 \to 1.53 \to 1.15$. The monotone decline on
+which H1's rejection rests is therefore not an artefact of the temporal protocol.
+Grouped performance sits above temporal at every stage, which is what temporal
+drift predicts: a model tested on its own period's peers faces an easier problem
+than one tested on the future.
 
 \paragraph{Calibration set.}
 Fitting the calibrator on the validation month rather than on a slice of the
@@ -1072,6 +1106,7 @@ reseeding (Appendix~A), which is itself a caution against reading too much into
 convergence among small numbers of measurements.
 
 \subsection{Limitations and threats to validity}
+\label{sec:limitations}
 
 \paragraph{Absent variables.} Search-query text is unavailable in both datasets and
 scroll depth is proxied by dwell time (Table~\ref{tab:availability}). Device and
@@ -1097,6 +1132,13 @@ this fraction substantially.
 \paragraph{The recurrent arm is small.} The GRU is trained briefly on a subsample,
 and its attributions carry seed standard deviations of 0.2--0.4. Conclusions from it
 are correspondingly weak, and one single-seed conclusion had to be withdrawn.
+
+\paragraph{The validation partition is used twice.} Hyperparameter tuning selects
+among models on validation PR-AUC, and the operating threshold is subsequently
+chosen on the same partition. The interaction is weak---tuning optimises a
+threshold-free metric and thresholding is a downstream choice on the
+already-selected model---but it is a double use, and a stricter design would
+reserve a separate partition for each.
 
 \paragraph{External validity.} One retailer, one market, one month. The framework is
 portable; these specific attribution trajectories are not claimed to be.
@@ -1175,7 +1217,7 @@ Explanations are reported at cohort level.
 \section{Pre-registered protocol and amendment log}
 %==============================================================================
 
-The pre-registered protocol (v1.0) and the complete dated amendment log (23
+The pre-registered protocol (v1.0) and the complete dated amendment log (26
 entries) accompany this manuscript. Amendments record every deviation from the
 frozen protocol with its date, rationale and affected sections, including three
 cut-point redefinitions made on the basis of measurement
