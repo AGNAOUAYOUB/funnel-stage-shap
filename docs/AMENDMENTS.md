@@ -766,3 +766,44 @@ arm has now been run (25 instances per stage, noise sd 0.05) and the table regen
 stages stable. Faithfulness, deletion/insertion and seed-consistency values reproduced
 exactly, so the regeneration changed nothing previously reported. S2 remains the anomalous
 stage on faithfulness but is not unstable.
+
+---
+
+## 2026-08-06 (later) — Literature claim substantiated
+
+### A27. The `[UNVERIFIED CLAIM]` about explanation validation is now evidenced (Sec. 2.3)
+
+**What was flagged.** The draft asserted, on impression rather than evidence, that
+applied e-commerce XAI studies rarely validate their explanations. It was marked
+`[UNVERIFIED CLAIM]` because no systematic search had been run, and it is load-bearing:
+the paper's validation layer is motivated by it.
+
+**Search performed (2026-08-06).** Targeted search for quantitative reviews of XAI
+*evaluation practice*, as opposed to XAI method surveys. Query themes: proportion of
+XAI application papers that evaluate explanation quality; systematic/scoping reviews of
+SHAP application practice. Four reviews with explicit counts were located and their
+bibliographic details verified against publisher records.
+
+**What the evidence supports.**
+
+- Saarela & Podgorelec (2024), *Applied Sciences* 14(19):8884 — PRISMA review of 512
+  XAI application articles: most give no quantitative evaluation of explanation
+  quality; ~19% use quantitative metrics; SHAP/LIME predominate.
+- Mainali & Weber (2023), arXiv:2307.09673 — scoping review of 187 application papers
+  self-describing as "explainable model": **81% conduct no evaluation** of the XAI
+  method; 64% of the full set use SHAP or LIME with no evaluation.
+- Nauta et al. (2023), *ACM Comput. Surv.* 55(13s):295 — 312 papers that *introduce*
+  XAI methods: one in three evaluate exclusively with anecdotal evidence.
+- Adadi & Berrada (2018), *IEEE Access* 6:52138--52160 — 5% of 381 papers focused
+  explicitly on evaluation.
+
+**Decision.** The claim is retained and strengthened, now stated with figures and
+citations rather than as an impression. Two qualifications are recorded honestly:
+(i) none of the four reviews is specific to e-commerce, so the manuscript claims the
+gap for *applied XAI* generally rather than for e-commerce in particular, which is the
+weaker and supportable form; (ii) the abstract's "almost never validated" was reduced
+to "rarely validated", since 81% no-evaluation implies roughly one in five do evaluate.
+
+**Also softened.** A separate, still-unevidenced assertion that applied studies "rarely
+draw the distinction" between predictive contribution and explanatory attribution was
+rewritten as a statement about what this paper reports, not about what others omit.

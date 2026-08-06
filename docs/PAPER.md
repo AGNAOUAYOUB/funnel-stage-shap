@@ -15,10 +15,11 @@
 > 2. **The protocol referenced "GroupSegment-SHAP".** I could not verify that a method by
 >    that name exists. It is *not* cited here. If it does exist, add it to §2.2; if it does
 >    not, the related-work positioning is unaffected.
-> 3. **Sections marked `[UNVERIFIED CLAIM]`** assert something about the state of the
->    literature that I have not systematically checked (e.g. "most e-commerce XAI studies do
->    not validate their explanations"). These need a documented search before they can stand
->    as written.
+> 3. ~~Sections marked `[UNVERIFIED CLAIM]`~~ **Resolved (amendment A27).** The
+>    explanation-validation gap claim in §2.3 was checked against four quantitative
+>    reviews of XAI evaluation practice and now carries figures and citations. It is
+>    stated for applied XAI generally, not for e-commerce specifically, since none of
+>    the located reviews is domain-restricted. No `[UNVERIFIED CLAIM]` markers remain.
 >
 > All *numerical results* in §4 come from `reports/tables/` in the accompanying repository
 > and are reproducible from the frozen splits and seed list.
@@ -174,10 +175,21 @@ perturbation (Alvarez-Melis & Jaakkola, 2018), and toolkits now exist to standar
 measurements (Hedström et al., 2023). Explanations are also known to be manipulable and
 therefore worth verifying rather than trusting (Slack et al., 2020).
 
-`[UNVERIFIED CLAIM]` Our impression is that applied e-commerce XAI studies rarely apply any
-of these tests, reporting SHAP summary plots without validation. **This claim requires a
-systematic review before it can be stated as written**; it currently rests on informal
-reading and is the single most important gap-claim in the paper.
+Applied work rarely applies any of these tests. Reviewing 512 XAI application articles
+under a PRISMA protocol, Saarela and Podgorelec (2024) find that most report no
+quantitative evaluation of explanation quality, with roughly one in five using
+quantitative metrics, and that SHAP and LIME predominate among the methods used. In a
+scoping review restricted to the 187 application papers that describe their models as
+*explainable*, Mainali and Weber (2023) find 81% conduct no evaluation at all of the XAI
+method adopted, and that 64% of the full set use SHAP or LIME without evaluation. Even
+among papers that *introduce* XAI methods, one in three evaluate exclusively with
+anecdotal evidence (Nauta et al., 2023), an improvement on the 5% of 381 papers that
+Adadi and Berrada (2018) found focused explicitly on evaluation, but not a large one.
+
+Two qualifications travel with this claim (amendment A27). None of these reviews is
+specific to e-commerce, so the supportable statement concerns applied XAI generally
+rather than this domain in particular; and 81% without evaluation means roughly one in
+five studies do validate, so "rarely" is accurate where "never" would not be.
 
 ### 2.4 Positioning
 
