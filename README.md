@@ -90,7 +90,29 @@ proxied silently.
 .venv/Scripts/python.exe -m pytest
 ```
 
-Pipeline stages are DVC targets; see `dvc.yaml` and the run sheet in the protocol Sec. 13.
+## Reproducibility, stated precisely
+
+Three mechanisms support reproduction, and they are not equally strong; the
+distinction matters more than the label "reproducible".
+
+**Scripted and seeded (strong).** Every reported number is produced by a
+`funnel-shap` CLI command against splits frozen on disk and the frozen seed list
+`{7, 17, 29, 42, 87}`. Given the same inputs, re-running a command reproduces its
+table. Notebooks are for exploration only.
+
+**Run logging (strong, from 2026-08-06).** `stage-models`, `baselines-a` and
+`tune` log parameters, summary metrics, the git commit and their output tables to
+`experiments/mlruns/` (Sec. 6.2). Results produced before that date predate the
+logging and are not in the store; see amendment A29.
+
+**DVC pipeline (declarative only).** `dvc.yaml` describes the real pipeline —
+each `cmd` is the command that produced the corresponding artefacts, and the DAG
+is structurally valid — but it has **not** been executed end to end via
+`dvc repro` here, because stage 1 needs the 42.4M-event raw log, which is not
+redistributed. Treat it as an accurate map, not as evidence of a push-button
+rebuild. See amendment A28.
+
+See also the run sheet in the protocol Sec. 13.
 
 ## Citation
 

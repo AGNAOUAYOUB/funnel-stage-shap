@@ -1,5 +1,16 @@
 # Pipeline stages (protocol Sec. 6.1, run sheet Sec. 13).
-# Stages 1-5 of the run sheet are implemented; modelling stages follow.
+#
+# This file describes the pipeline that produced the reported results, which
+# runs on the seeded 200,000-user subsample (suffix `gap30s200000`) that
+# Sec. 5.3 permits for tractability. Earlier revisions declared an
+# un-subsampled `gap30` pipeline whose outputs were never produced; see
+# amendment A28.
+#
+# STATUS: the DAG is declarative and structurally validated, but has not been
+# executed end to end by `dvc repro` in this repository, because stage 1
+# requires the 42.4M-event raw log, which is not redistributed here. Each
+# stage's `cmd` is the exact command that produced the corresponding
+# artefacts. Do not read this file as evidence of a push-button rebuild.
 
 stages:
   tables:
@@ -15,58 +26,235 @@ stages:
           cache: false
 
   sessionize:
-    # Run-sheet steps 3-4: clean -> sessionise -> stage cut-points.
-    cmd: python -m funnel_shap.cli sessionize --gap-minutes 30
+    # Run-sheet steps 3-4: clean -> sessionise -> subsample -> stage cut-points.
+    # The subsample is seeded (seed 42) and applied at user level, so the
+    # retained population is reconstructible.
+    cmd: python -m funnel_shap.cli sessionize --gap-minutes 30 --sample-users 200000
     deps:
-      - data/raw/rees46
+      - data/raw/rees46/2019-Oct.parquet
       - src/funnel_shap/data/sessionize.py
       - src/funnel_shap/data/journey.py
+      - src/funnel_shap/data/subsample.py
     outs:
       - data/interim/sessions_gap30.parquet
-      - data/interim/cutpoints_gap30.parquet
+      - data/interim/sessions_gap30s200000.parquet
+      - data/interim/cutpoints_gap30s200000.parquet
     metrics:
       - reports/tables/data_flow_gap30.csv:
           cache: false
-      - reports/tables/stage_prevalence_gap30.csv:
+      - reports/tables/stage_prevalence_gap30s200000.csv:
           cache: false
 
   features:
     # Run-sheet step 5: nested prefix feature matrices per stage.
-    cmd: python -m funnel_shap.cli build-features --suffix gap30
+    cmd: python -m funnel_shap.cli build-features --suffix gap30s200000
     deps:
-      - data/interim/sessions_gap30.parquet
-      - data/interim/cutpoints_gap30.parquet
+      - data/interim/sessions_gap30s200000.parquet
+      - data/interim/cutpoints_gap30s200000.parquet
       - src/funnel_shap/features/prefix_features.py
       - src/funnel_shap/features/dictionary.py
     outs:
-      - data/processed/features_gap30_S1.parquet
-      - data/processed/features_gap30_S2.parquet
-      - data/processed/features_gap30_S3.parquet
+      - data/processed/features_gap30s200000_S1.parquet
+      - data/processed/features_gap30s200000_S2.parquet
+      - data/processed/features_gap30s200000_S3.parquet
+
+  freeze_splits:
+    # Run-sheet step 6. Refuses to overwrite an existing split; the test
+    # partition opens exactly once, at final evaluation.
+    cmd: python -m funnel_shap.cli freeze-splits --suffix gap30s200000
+    deps:
+      - data/interim/sessions_gap30s200000.parquet
+      - data/interim/cutpoints_gap30s200000.parquet
+      - src/funnel_shap/data/splits.py
+    outs:
+      - data/processed/splits/split_gap30s200000_temporal.parquet
+      - data/processed/splits/split_gap30s200000_temporal.json
+      - data/processed/splits/split_gap30s200000_grouped.parquet
+      - data/processed/splits/split_gap30s200000_grouped.json
+
+  baselines_a:
+    # Run-sheet step 7: model-family selection on the static benchmark.
+    cmd: python -m funnel_shap.cli baselines-a
+    deps:
+      - data/raw/online_shoppers_intention.csv
+      - src/funnel_shap/models/baselines.py
+      - src/funnel_shap/models/run_baselines.py
+    metrics:
+      - reports/tables/dataset_a_baselines_summary.csv:
+          cache: false
+      - reports/tables/dataset_a_baselines_per_seed.csv:
+          cache: false
+
+  tune:
+    # Run-sheet step 10 (Sec. 9.5). Reported as a robustness analysis; the
+    # headline stage models below deliberately use default hyperparameters.
+    cmd: python -m funnel_shap.cli tune --suffix gap30s200000 --n-trials 100
+    deps:
+      - data/processed/features_gap30s200000_S1.parquet
+      - data/processed/features_gap30s200000_S2.parquet
+      - data/processed/features_gap30s200000_S3.parquet
+      - data/processed/splits/split_gap30s200000_temporal.parquet
+      - src/funnel_shap/models/tuning.py
+    metrics:
+      - reports/tables/tuning_gap30s200000.csv:
+          cache: false
+
+  stage_models:
+    # Run-sheet steps 8 and 11: the improvement curve, the ablation ladder and
+    # the Sec. 12 confirmatory family.
+    cmd: python -m funnel_shap.cli stage-models --suffix gap30s200000 --ablation
+    deps:
+      - data/processed/features_gap30s200000_S1.parquet
+      - data/processed/features_gap30s200000_S2.parquet
+      - data/processed/features_gap30s200000_S3.parquet
+      - data/processed/splits/split_gap30s200000_temporal.parquet
+      - src/funnel_shap/models/run_stages.py
+      - src/funnel_shap/evaluate/stage_tests.py
+    metrics:
+      - reports/tables/stage_models_gap30s200000_per_seed.csv:
+          cache: false
+      - reports/tables/improvement_curve_gap30s200000.csv:
+          cache: false
+      - reports/tables/ablation_gap30s200000.csv:
+          cache: false
+      - reports/tables/comparisons_gap30s200000.csv:
+          cache: false
+
+  stage_models_grouped:
+    # Sec. 7.6 robustness arm: same configuration, grouped split.
+    cmd: python -m funnel_shap.cli stage-models --suffix gap30s200000 --protocol grouped
+    deps:
+      - data/processed/features_gap30s200000_S1.parquet
+      - data/processed/features_gap30s200000_S2.parquet
+      - data/processed/features_gap30s200000_S3.parquet
+      - data/processed/splits/split_gap30s200000_grouped.parquet
+      - src/funnel_shap/models/run_stages.py
+    metrics:
+      - reports/tables/improvement_curve_gap30s200000_grouped.csv:
+          cache: false
+      - reports/tables/stage_models_gap30s200000_grouped_per_seed.csv:
+          cache: false
+
+  stage_models_tuned:
+    # Sensitivity arm: the same models refitted with the Optuna selections.
+    cmd: python -m funnel_shap.cli stage-models --suffix gap30s200000 --tuned
+    deps:
+      - data/processed/features_gap30s200000_S1.parquet
+      - data/processed/features_gap30s200000_S2.parquet
+      - data/processed/features_gap30s200000_S3.parquet
+      - data/processed/splits/split_gap30s200000_temporal.parquet
+      - reports/tables/tuning_gap30s200000.csv
+      - src/funnel_shap/models/run_stages.py
+    metrics:
+      - reports/tables/improvement_curve_gap30s200000_tuned.csv:
+          cache: false
+      - reports/tables/stage_models_gap30s200000_tuned_per_seed.csv:
+          cache: false
+
+  stage_shap:
+    # Run-sheet step 12: Layer 1 attribution and the RQ2 migration table.
+    cmd: python -m funnel_shap.cli stage-shap --suffix gap30s200000
+    deps:
+      - data/processed/features_gap30s200000_S1.parquet
+      - data/processed/features_gap30s200000_S2.parquet
+      - data/processed/features_gap30s200000_S3.parquet
+      - data/processed/splits/split_gap30s200000_temporal.parquet
+      - src/funnel_shap/explain/stage_shap.py
+      - src/funnel_shap/explain/run_stage_shap.py
+    metrics:
+      - reports/tables/stage_importance_gap30s200000.csv:
+          cache: false
+      - reports/tables/attribution_migration_gap30s200000.csv:
+          cache: false
+
+  static_contrast:
+    # RQ4: what a whole-session attribution would have flattened.
+    cmd: python -m funnel_shap.cli static-contrast --suffix gap30s200000
+    deps:
+      - reports/tables/attribution_migration_gap30s200000.csv
+      - src/funnel_shap/explain/static_contrast.py
+    metrics:
+      - reports/tables/static_contrast_gap30s200000.csv:
+          cache: false
+
+  explanation_quality:
+    # Run-sheet step 14: Layer 3, all three arms including local Lipschitz.
+    cmd: python -m funnel_shap.cli explanation-quality --suffix gap30s200000
+    deps:
+      - data/processed/features_gap30s200000_S1.parquet
+      - data/processed/features_gap30s200000_S2.parquet
+      - data/processed/features_gap30s200000_S3.parquet
+      - data/processed/splits/split_gap30s200000_temporal.parquet
+      - src/funnel_shap/explain/quality.py
+      - src/funnel_shap/explain/run_quality.py
+    metrics:
+      - reports/tables/explanation_quality_gap30s200000.csv:
+          cache: false
+
+  sequence_arm:
+    # Run-sheet steps 9 and 13: GRU on the same prefixes, TimeSHAP, aggregate H4.
+    cmd: python -m funnel_shap.cli sequence-arm --suffix gap30s200000
+    deps:
+      - data/interim/sessions_gap30s200000.parquet
+      - data/interim/cutpoints_gap30s200000.parquet
+      - data/processed/splits/split_gap30s200000_temporal.parquet
+      - src/funnel_shap/models/sequence.py
+      - src/funnel_shap/explain/sequence_shap.py
+      - src/funnel_shap/explain/run_sequence.py
+    metrics:
+      - reports/tables/h4_cross_paradigm_gap30s200000.csv:
+          cache: false
+
+  per_instance_h4:
+    # Amendment A22/A23b: H4 per journey, over the frozen seed list.
+    cmd: >-
+      python -m funnel_shap.cli per-instance-h4 --suffix gap30s200000
+      --seeds 7,17,29,42,87
+    deps:
+      - data/interim/sessions_gap30s200000.parquet
+      - data/interim/cutpoints_gap30s200000.parquet
+      - data/processed/splits/split_gap30s200000_temporal.parquet
+      - src/funnel_shap/explain/per_instance_h4.py
+    metrics:
+      - reports/tables/per_instance_h4_seeds_gap30s200000.csv:
+          cache: false
+
+  figures:
+    # Run-sheet step 16.
+    cmd: python -m funnel_shap.cli figures --suffix gap30s200000
+    deps:
+      - reports/tables/improvement_curve_gap30s200000.csv
+      - reports/tables/attribution_migration_gap30s200000.csv
+      - reports/tables/explanation_quality_gap30s200000.csv
+      - reports/tables/stage_models_gap30s200000_per_seed.csv
+      - src/funnel_shap/report/figures.py
+    outs:
+      - reports/figures/fig1_data_flow.pdf:
+          cache: false
+      - reports/figures/fig2_improvement_curve.pdf:
+          cache: false
+      - reports/figures/fig3_attribution_migration.pdf:
+          cache: false
+      - reports/figures/fig4_explanation_quality.pdf:
+          cache: false
+      - reports/figures/fig5_reliability.pdf:
+          cache: false
 
   # Sensitivity arm for the Sec. 7.2 appendix. Not on the critical path.
   sessionize_sensitivity:
     foreach: [15, 60]
     do:
-      cmd: python -m funnel_shap.cli sessionize --gap-minutes ${item}
+      cmd: >-
+        python -m funnel_shap.cli sessionize --gap-minutes ${item}
+        --sample-users 200000
       deps:
-        - data/raw/rees46
+        - data/raw/rees46/2019-Oct.parquet
         - src/funnel_shap/data/sessionize.py
+        - src/funnel_shap/data/subsample.py
       outs:
         - data/interim/sessions_gap${item}.parquet
-        - data/interim/cutpoints_gap${item}.parquet
+        - data/interim/sessions_gap${item}s200000.parquet
+        - data/interim/cutpoints_gap${item}s200000.parquet
       metrics:
-        - reports/tables/stage_prevalence_gap${item}.csv:
+        - reports/tables/stage_prevalence_gap${item}s200000.csv:
             cache: false
-
-# Remaining run-sheet steps (6-16) are added as their modules land:
-#   6.  freeze splits        -> data/processed/splits/
-#   7.  baselines on A       -> static SHAP
-#   8.  stage models on B    -> prediction-improvement curve
-#   9.  sequence model on B  -> train, calibrate
-#   10. tuning (nested CV, Optuna), >=5 seeds
-#   11. predictive evaluation + ablation
-#   12. layer-1 stage SHAP + migration analysis
-#   13. layer-2 TimeSHAP
-#   14. layer-3 faithfulness / stability / consistency
-#   15. statistical tests + corrections
-#   16. figures, tables, write-up

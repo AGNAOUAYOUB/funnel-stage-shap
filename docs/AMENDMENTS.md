@@ -807,3 +807,44 @@ to "rarely validated", since 81% no-evaluation implies roughly one in five do ev
 **Also softened.** A separate, still-unevidenced assertion that applied studies "rarely
 draw the distinction" between predictive contribution and explanatory attribution was
 rewritten as a statement about what this paper reports, not about what others omit.
+
+### A28. The DVC pipeline described a run that never happened (Sec. 6.1)
+
+**What was wrong.** `dvc.yaml` declared an un-subsampled `gap30` pipeline: it
+sessionised without `--sample-users`, built features with `--suffix gap30`, and
+declared metrics such as `stage_prevalence_gap30.csv`. The reported analysis ran on
+the seeded 200,000-user subsample (`gap30s200000`). Three of the six declared output
+paths did not exist on disk, and the modelling, explanation and validation stages were
+absent entirely, left as a comment reading "added as their modules land" long after
+those modules had landed.
+
+**Fix.** `dvc.yaml` now describes the pipeline that produced the reported results: 17
+stages from sessionisation through figures, including the grouped-split and tuned
+robustness arms, each stage's `cmd` being the exact command that produced its
+artefacts. The DAG was validated structurally (`dvc dag`): it parses, is acyclic, and
+its dependency edges match the real data flow.
+
+**What is still not claimed.** The pipeline has not been executed end to end by
+`dvc repro` in this repository, because stage 1 requires the 42.4M-event raw log,
+which is not redistributed. `dvc.yaml` is therefore an accurate map of the analysis,
+not evidence of a push-button rebuild, and the README now says so. The reproducibility
+claim rests on the CLI being scripted and seeded against frozen splits, which is the
+weaker but true statement.
+
+### A29. MLflow run logging was required but never implemented (Sec. 6.2)
+
+**What was wrong.** Sec. 6.2 requires runs to be logged. Only `RunConfig.to_mlflow_params()`
+existed; nothing called it, and `experiments/mlruns/` was empty.
+
+**Fix.** A `funnel_shap.tracking` module logs parameters, summary metrics, the git
+commit and output tables to the local MLflow file store, wired into `stage-models`,
+`baselines-a` and `tune` (each with a `--no-track` escape). Tracking degrades to a
+warning rather than an exception on any backend failure: a logging system that can
+abort an analysis is worse than none, since the numbers are the deliverable and the
+audit trail is support for them. Eleven tests cover the contract, including that a
+simulated backend failure does not propagate.
+
+**Honest scope.** Results produced before 2026-08-06 predate the logging and are not
+in the store. The headline stage-model run was re-executed under tracking, both to
+populate the store with a genuine run and as a reproducibility check against the
+existing tables.

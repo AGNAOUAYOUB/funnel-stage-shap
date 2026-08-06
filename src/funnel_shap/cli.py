@@ -226,6 +226,7 @@ def baselines_a(
     models: str = typer.Option("", help="Comma-separated subset; default is all five"),
     seeds: str = typer.Option("", help="Comma-separated subset of the frozen seed list"),
     imbalance: str = "class_weight",
+    track: bool = typer.Option(True, help="Log the run to MLflow (Sec. 6.2)"),
 ) -> None:
     """Run the Dataset A baselines (run-sheet step 7, Sec. 9-10)."""
     paths.ensure_dirs()
@@ -259,6 +260,29 @@ def baselines_a(
         fg=typer.colors.YELLOW,
     )
 
+    from .tracking import track_run
+
+    with track_run(
+        "baselines-a",
+        experiment="baselines-a",
+        params={
+            "dataset": "A", "models": ",".join(chosen_models),
+            "seeds": ",".join(str(s) for s in chosen_seeds), "imbalance": imbalance,
+        },
+        enabled=track,
+    ) as run:
+        metrics = {}
+        for row in summary.to_dicts():
+            model = row["model"]
+            for key, value in row.items():
+                if key != "model":
+                    metrics[f"{key}.{model}"] = value
+        run.log_metrics(metrics)
+        for name in ("dataset_a_baselines_per_seed.csv", "dataset_a_baselines_summary.csv"):
+            run.log_artifact(paths.TABLES / name)
+        if run.active:
+            typer.echo(f"\nlogged to MLflow: {paths.MLRUNS}")
+
 
 @app.command()
 def tune(
@@ -267,6 +291,7 @@ def tune(
     models: str = typer.Option("lightgbm", help="Comma-separated model types"),
     n_trials: int = typer.Option(100, help="Trials per (stage, model) study"),
     seed: int = 42,
+    track: bool = typer.Option(True, help="Log the run to MLflow (Sec. 6.2)"),
 ) -> None:
     """Optuna tuning per stage on the frozen validation split (Sec. 9.5)."""
     paths.ensure_dirs()
@@ -331,6 +356,29 @@ def tune(
     pl.DataFrame(rows).write_csv(out)
     typer.echo(f"\n-> {out}")
 
+    from .tracking import track_run
+
+    with track_run(
+        f"tune/{suffix}",
+        experiment="tuning",
+        params={
+            "suffix": suffix, "protocol": protocol, "models": ",".join(chosen_models),
+            "n_trials": n_trials, "seed": seed,
+        },
+        enabled=track,
+    ) as run:
+        for row in rows:
+            key = f"{row['stage']}.{row['model']}"
+            run.log_metrics({
+                f"best_val_pr_auc.{key}": row["best_val_pr_auc"],
+                f"n_completed.{key}": row["n_completed"],
+                f"n_pruned.{key}": row["n_pruned"],
+            })
+            # The selected configuration is a parameter of everything downstream,
+            # so it is logged as such rather than left only in the study file.
+            run.log_params({f"best_params.{key}": row["best_params"]})
+        run.log_artifact(out)
+
 
 @app.command()
 def stage_models(
@@ -342,6 +390,7 @@ def stage_models(
     tuned: bool = typer.Option(
         False, help="Use Optuna best params from experiments/optuna/ (Sec. 9.5)"
     ),
+    track: bool = typer.Option(True, help="Log the run to MLflow (Sec. 6.2)"),
 ) -> None:
     """Fit the Dataset B stage models (run-sheet step 8, Sec. 9.2)."""
     paths.ensure_dirs()
@@ -405,9 +454,13 @@ def stage_models(
     tag = suffix if protocol == "temporal" else f"{suffix}_{protocol}"
     if tuned:
         tag = f"{tag}_tuned"
-    stage_results_table(runs).write_csv(paths.TABLES / f"stage_models_{tag}_per_seed.csv")
+    per_seed_path = paths.TABLES / f"stage_models_{tag}_per_seed.csv"
+    stage_results_table(runs).write_csv(per_seed_path)
     curve = improvement_curve(runs)
-    curve.write_csv(paths.TABLES / f"improvement_curve_{tag}.csv")
+    curve_path = paths.TABLES / f"improvement_curve_{tag}.csv"
+    curve.write_csv(curve_path)
+
+    artifacts = [per_seed_path, curve_path]
 
     typer.echo("")
     typer.echo(curve)
@@ -419,7 +472,9 @@ def stage_models(
 
     if ablation:
         table = ablation_table(runs)
-        table.write_csv(paths.TABLES / f"ablation_{tag}.csv")
+        ablation_path = paths.TABLES / f"ablation_{tag}.csv"
+        table.write_csv(ablation_path)
+        artifacts.append(ablation_path)
         typer.echo("")
         typer.echo(table)
 
@@ -427,9 +482,30 @@ def stage_models(
         from .evaluate.stage_tests import run_stage_comparisons, summarise
 
         comparisons = run_stage_comparisons(runs)
-        comparisons.write_csv(paths.TABLES / f"comparisons_{tag}.csv")
+        comparisons_path = paths.TABLES / f"comparisons_{tag}.csv"
+        comparisons.write_csv(comparisons_path)
+        artifacts.append(comparisons_path)
         typer.echo("")
         typer.echo(summarise(comparisons))
+
+    # Sec. 6.2: the run is logged last, so every table it produced is attached.
+    from .tracking import stage_run_metrics, track_run
+
+    with track_run(
+        f"stage-models/{tag}",
+        experiment="stage-models",
+        params={
+            "suffix": suffix, "protocol": protocol, "models": ",".join(chosen_models),
+            "seeds": ",".join(str(s) for s in chosen_seeds), "ablation": ablation,
+            "tuned": tuned, "feature_sets": ",".join(feature_sets),
+        },
+        enabled=track,
+    ) as run:
+        run.log_metrics(stage_run_metrics(runs))
+        for path in artifacts:
+            run.log_artifact(path)
+        if run.active:
+            typer.echo(f"\nlogged to MLflow: {paths.MLRUNS}")
 
 
 @app.command()
@@ -440,6 +516,7 @@ def stage_shap(
     seed: int = 42,
     max_explain: int = 5000,
     background_size: int = 2000,
+    track: bool = typer.Option(True, help="Log the run to MLflow (Sec. 6.2)"),
 ) -> None:
     """Layer 1: stage-conditioned SHAP and the RQ2 migration table (Sec. 11.1)."""
     paths.ensure_dirs()
@@ -463,10 +540,12 @@ def stage_shap(
         raise typer.BadParameter("no stage could be explained")
 
     importance = stage_importance_table(explanations)
-    importance.write_csv(paths.TABLES / f"stage_importance_{suffix}.csv")
+    importance_path = paths.TABLES / f"stage_importance_{suffix}.csv"
+    importance.write_csv(importance_path)
 
     migration = migration_table(explanations)
-    migration.write_csv(paths.TABLES / f"attribution_migration_{suffix}.csv")
+    migration_path = paths.TABLES / f"attribution_migration_{suffix}.csv"
+    migration.write_csv(migration_path)
 
     typer.echo("")
     for stage, explanation in explanations.items():
@@ -484,7 +563,28 @@ def stage_shap(
     reversals = migration.filter(pl.col("reversed_sign"))
     typer.echo("")
     typer.echo(f"sign reversals across stages: {reversals['group'].n_unique()}")
-    typer.echo(f"migration table -> {paths.TABLES / f'attribution_migration_{suffix}.csv'}")
+    typer.echo(f"migration table -> {migration_path}")
+
+    from .tracking import track_run
+
+    with track_run(
+        f"stage-shap/{suffix}",
+        experiment="stage-shap",
+        params={
+            "suffix": suffix, "protocol": protocol, "model": model, "seed": seed,
+            "max_explain": max_explain, "background_size": background_size,
+        },
+        enabled=track,
+    ) as run:
+        # The attribution shares are the RQ2 result; logging them makes the
+        # migration reconstructible from the run record alone.
+        run.log_metrics({
+            f"share.{row['stage']}.{row['group']}": row["share"]
+            for row in importance.to_dicts()
+        })
+        run.log_metrics({"sign_reversals": reversals["group"].n_unique()})
+        run.log_artifact(importance_path)
+        run.log_artifact(migration_path)
 
 
 @app.command()
@@ -495,6 +595,7 @@ def explanation_quality(
     seed: int = 42,
     consistency: bool = typer.Option(True, help="Run the across-seed consistency arm"),
     stability: bool = typer.Option(True, help="Run the local-Lipschitz arm (slow)"),
+    track: bool = typer.Option(True, help="Log the run to MLflow (Sec. 6.2)"),
 ) -> None:
     """Layer 3: faithfulness, stability and consistency (Sec. 11.3, RQ3)."""
     paths.ensure_dirs()
@@ -558,9 +659,30 @@ def explanation_quality(
                 row["seed_consistency_passes"] = r.passes
 
     table = pl.DataFrame(rows)
-    table.write_csv(paths.TABLES / f"explanation_quality_{suffix}.csv")
+    out = paths.TABLES / f"explanation_quality_{suffix}.csv"
+    table.write_csv(out)
     typer.echo("")
-    typer.echo(f"-> {paths.TABLES / f'explanation_quality_{suffix}.csv'}")
+    typer.echo(f"-> {out}")
+
+    from .tracking import track_run
+
+    with track_run(
+        f"explanation-quality/{suffix}",
+        experiment="explanation-quality",
+        params={
+            "suffix": suffix, "protocol": protocol, "model": model, "seed": seed,
+            "consistency": consistency, "stability": stability,
+        },
+        enabled=track,
+    ) as run:
+        for row in rows:
+            stage = row["stage"]
+            run.log_metrics({
+                f"{key}.{stage}": value
+                for key, value in row.items()
+                if key != "stage"
+            })
+        run.log_artifact(out)
 
 
 @app.command()

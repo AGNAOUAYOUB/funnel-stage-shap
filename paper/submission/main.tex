@@ -1503,11 +1503,19 @@ The authors declare that they have no known competing financial interests
 or personal relationships that could have appeared to influence the work
 reported in this paper.
 
-\section*{Data availability}
+\section*{Data and code availability}
 Dataset~A is publicly available from the UCI Machine Learning Repository.
 Dataset~B (REES46 multi-category store, October 2019) is publicly
 distributed; provenance hashes, the frozen splits, the seed list, all
 result tables and the full analysis code accompany this manuscript.
+
+Every reported number is produced by a scripted, seeded command-line entry
+point reading splits frozen to disk before any model was fitted, and runs
+are logged with their parameters, metrics and output tables. A pipeline
+specification documents the dependency structure of the analysis; it is an
+accurate description of the commands that generated the results rather than
+a self-contained rebuild, since the raw 42.4-million-event log is not
+redistributed with the repository.
 
 \section*{Declaration of generative AI in the writing process}
 % NOTE TO AUTHORS: complete per journal policy before submission.
