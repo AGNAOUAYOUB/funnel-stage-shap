@@ -1,0 +1,1515 @@
+%==============================================================================
+%  Funnel-Stage SHAP: A Design Science Framework for Stage-Conditioned
+%  Explainable Purchase Prediction in E-Commerce
+%
+%  Compile:  latexmk -pdf main.tex        (or pdflatex/bibtex/pdflatex x2)
+%
+%  Class:    elsarticle (Elsevier). If unavailable, swap the lines marked
+%            FALLBACK below for the standard article class.
+%
+%  All numerical results are reproducible from the frozen splits and seed
+%  list in the accompanying repository (reports/tables/).
+%==============================================================================
+
+\documentclass[review,3p,times,authoryear]{elsarticle}   % <-- FALLBACK: comment out
+% \documentclass[11pt,a4paper]{article}                  % <-- FALLBACK: uncomment
+% \usepackage[authoryear,round]{natbib}                  % <-- FALLBACK: uncomment
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{siunitx}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage{caption}
+\usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
+
+\graphicspath{{figures/}}
+\sisetup{detect-weight=true, detect-family=true}
+
+% Compact helper for a "pass"/"fail" cell against a pre-registered threshold.
+\newcommand{\pass}{\textbf{pass}}
+\newcommand{\fail}{\textit{fail}}
+
+\journal{Decision Support Systems}
+
+\begin{document}
+
+\begin{frontmatter}
+
+\title{Funnel-Stage SHAP: a design science framework for stage-conditioned
+       explainable purchase prediction in e-commerce}
+
+% NOTE TO AUTHORS: complete the affiliation fields and the second author's
+% given name before submission; placeholders are intentional.
+\author[a]{Ayoub Agnaou\corref{cor1}}
+\ead{ay.agnaou@edu.umi.ac.ma}
+\author[a]{S.~Ailli}
+\cortext[cor1]{Corresponding author.}
+\affiliation[a]{organization={[Institution]},
+                addressline={[Address]},
+                city={[City]},
+                country={[Country]}}
+
+\begin{abstract}
+Purchase prediction from clickstream data is well established, but the
+explanations attached to such models are typically computed once, over the
+entire session, and are almost never validated. Both practices are
+problematic: a whole-session attribution incorporates events at or after the
+purchase decision, and it cannot express \emph{when} a behavioural driver
+mattered. We propose Funnel-Stage SHAP, a framework in which prediction and
+explanation are subject to the same temporal information constraint: at each
+funnel stage, an independent model is fitted on the event prefix observable at
+that stage's cut-point, Shapley attributions are computed from exactly the
+same prefix, and a dedicated validation layer tests whether the resulting
+explanations are faithful, stable under perturbation and reproducible across
+seeds. Following a design science methodology, the framework is instantiated
+on a session-level benchmark (12,330 sessions) and on an event-level
+clickstream of 42.4 million events yielding 485,459 reconstructed sessions.
+Three findings run against expectation. First, once normalised by its own
+chance level, predictive performance \emph{declines} across the funnel
+(PR-AUC lift 1.79 to 1.09; ROC-AUC 0.641 to 0.569): conversion becomes
+harder, not easier, to predict as intent forms. Second, attribution is
+strongly non-monotone; navigation entropy carries 3.5\% of attribution mass
+at exploration, 22.4\% at consideration and 7.4\% at purchase intent, a
+trajectory that any whole-session analysis averages into a single
+uninformative value. Third, agreement between tree-based and recurrent
+attributions holds at the level of aggregate rankings but disappears at the
+level of individual journeys. Explanation quality tracks predictive signal,
+and we argue that it should therefore be validated per stage rather than per
+model.
+\end{abstract}
+
+\begin{keyword}
+Explainable AI \sep SHAP \sep purchase prediction \sep customer journey \sep
+clickstream analysis \sep design science research
+\end{keyword}
+
+\end{frontmatter}
+
+%==============================================================================
+\section{Introduction}
+\label{sec:intro}
+%==============================================================================
+
+Every interaction a customer performs on an e-commerce platform---product
+searches, page views, category navigation, cart additions---leaves a
+behavioural trace, and organisations routinely exploit these traces to
+predict whether a browsing session will end in a purchase. The predictions
+are acted upon while the session is still unfolding: retargeting budget is
+allocated, on-site interventions are triggered, service contacts are
+prioritised. Decisions of this kind require reasons, not only scores. A model
+that ranks sessions accurately but cannot say \emph{why} offers little
+guidance about what to change \citep{rudin2019stop}, and the marketing
+literature has long described the online journey as a sequence of
+qualitatively distinct phases rather than a single undifferentiated visit
+\citep{bucklin2003model, moe2003buying, lemon2016understanding}.
+
+Shapley additive explanations \citep[SHAP;][]{lundberg2017unified}, together
+with their exact tree-model variant \citep{lundberg2020local}, have become
+the default vehicle for supplying those reasons. In e-commerce they are
+typically applied in a particular way: a single model is fitted to
+session-level aggregates and a single attribution is computed per feature
+over the whole session. This common practice carries two defects, one
+methodological and one substantive.
+
+\textbf{The methodological defect is leakage inside the explanation.} When
+features are aggregated over an entire session they necessarily include
+events at or after the moment of purchase. The canonical benchmark for this
+task illustrates the problem directly: its strongest predictor,
+\texttt{PageValues}, is the average value of pages on which a transaction was
+completed, and is therefore partly a consequence of conversion rather than a
+cause of it \citep{sakar2019real}. A model built on such features may predict
+well and explain nothing, because the explanation describes the outcome
+rather than the behaviour that preceded it. The defect matters operationally
+as well as statistically: an explanation that assigns importance to
+checkout-page behaviour cannot support an intervention decision taken while
+the customer is still browsing product pages, because the attributed
+behaviour has not yet occurred.
+
+\textbf{The substantive defect is temporal flattening.} A single attribution
+per feature cannot express that a driver mattered at one point in the journey
+and not at another. If the importance of a behavioural signal genuinely
+changes as intent forms---which the staged view of the consumer journey
+predicts---then a whole-session attribution reports its average, a number
+that may correspond to no phase of the journey at all.
+
+Both defects share a root cause: prediction and explanation are generated
+under different informational regimes. Prefix-based prediction, developed in
+predictive process monitoring and early time-series classification, has
+established that reliable inference from the observable portion of an
+evolving sequence is feasible and that future observations must be excluded
+from model inputs \citep{verenich2019survey, wu2021early}. Explanation,
+however, has largely escaped the same discipline: feature attributions
+continue to be computed retrospectively from complete sessions, and their
+stability across the journey is almost never examined
+\citep{wickramanayake2023generating, mehdiyev2024quantifying}.
+
+\subsection{Positioning and contributions}
+\label{sec:positioning}
+
+Sequence-aware Shapley estimation already exists, and this paper does not
+propose a new estimator. TimeSHAP extends KernelSHAP to recurrent models and
+produces event-, timestep- and feature-level attributions
+\citep{bento2021timeshap}; WindowSHAP computes Shapley values over
+time-series windows \citep{nayebi2023windowshap}. Our contribution is
+framework-level and domain-level, and consists of three parts. The first is
+the funnel-stage conditioning of attributions: Shapley values are computed
+separately at each funnel stage, on the event prefix observable at that
+stage, and the resulting \emph{attribution trajectory} across stages is
+characterised, rather than one whole-session attribution being reported.
+The second is a validation layer for stage-conditioned explanations, which
+tests faithfulness, stability under input perturbation and reproducibility
+across random seeds, with thresholds fixed before any result was computed.
+The third is cross-paradigm evidence tested two ways: tree-based stage
+attributions are compared against recurrent-model attributions both as
+aggregate rankings and, critically, at the level of individual journeys.
+
+The study follows a design science research methodology
+\citep{hevner2004design} and is pre-registered: every analytic decision was
+fixed before the test partition was opened, and each subsequent deviation is
+recorded with a date and rationale in a public amendment log (Appendix~A).
+Twenty-six amendments were logged, several of which reverse an initial
+decision on the basis of measurement; we regard this record as part of the
+contribution rather than an embarrassment to be hidden.
+
+Three empirical findings, each running against the pre-registered
+expectation, structure the paper. First, prevalence-normalised predictive
+performance declines monotonically across the funnel, so the operating
+regime in which explanations are most needed---early, when intervention is
+still possible---is also the regime in which the model is most skilled
+relative to chance. Second, attribution mass migrates substantially across
+stages, with navigation behaviour peaking mid-funnel; a whole-session
+analysis provably flattens this structure. Third, aggregate agreement
+between explanation paradigms coexists with near-zero agreement about
+individual customers, which cautions against treating aggregate convergent
+validity as a licence for instance-level decisions.
+
+The remainder of the paper is organised as follows. Section~\ref{sec:related}
+reviews sequential purchase prediction, explainable AI for consumer
+analytics, and temporal validity, and states the research gap.
+Section~\ref{sec:framework} formalises the conceptual framework.
+Section~\ref{sec:methods} describes the data, the anti-leakage prefix
+protocol, the modelling, tuning and validation procedures.
+Section~\ref{sec:results} reports results against four pre-registered
+hypotheses. Section~\ref{sec:discussion} discusses implications, limitations
+and threats to validity. Section~\ref{sec:conclusion} concludes.
+
+%==============================================================================
+\section{Related work}
+\label{sec:related}
+%==============================================================================
+
+\subsection{Sequential purchase prediction across the customer journey}
+\label{sec:related-prediction}
+
+Purchase prediction has evolved from statistical choice models to
+architectures that exploit the temporal ordering of customer interactions.
+Early work emerged from session-based recommendation, where recurrent
+architectures---LSTM and GRU networks---became the dominant approach for
+inferring intent from short, often anonymous sessions
+\citep{zhang2020learning, zhang2021recurrent, sheu2021knowledge}, with deep
+learning surveyed more broadly by \citet{batmaz2018deep}. More recent
+advances substitute self-attention for recurrence:
+\citet{wang2023transformer} show that combining Transformer and
+convolutional components improves session-based recommendation by capturing
+global context and local sequential patterns simultaneously.
+
+Tree-based ensemble learning nevertheless remains highly competitive when
+behavioural information is represented as structured features. Gradient
+boosting methods---XGBoost \citep{chen2016xgboost}, LightGBM
+\citep{ke2017lightgbm} and CatBoost \citep{prokhorenkova2018catboost}---offer
+efficient training, robust handling of heterogeneous features and strong
+performance on large tabular datasets \citep{ahn2023ensemble}, and empirical
+comparisons in event-log prediction confirm that well-configured ensembles
+frequently match sequential architectures \citep{tama2020empirical}. Their
+limited intrinsic interpretability has, in turn, driven the widespread
+adoption of post-hoc explanation, particularly SHAP.
+
+A distinct stream addresses \emph{early} prediction: inferring the outcome
+before the sequence completes, so that intervention remains possible.
+\citet{wu2021early} formalise the conditions under which early time-series
+classification is meaningful, showing that many published approaches rest on
+implicit assumptions about the data-generating process that fail in
+deployment. Subsequent work jointly optimises accuracy and earliness
+\citep{wan2023memory} or incorporates causal structure into streaming
+classifiers \citep{cheung2023causal}. Across architectures, however, a
+common pattern persists: predictive performance is evaluated on complete
+sessions, or explanation is treated as a retrospective exercise performed
+after the final prediction. The explanatory side of early prediction---why
+the model believes what it believes at each decision point---has received
+little attention.
+
+\subsection{Explainable AI for consumer purchase prediction}
+\label{sec:related-xai}
+
+SHAP owes its prominence to its game-theoretic foundation: it satisfies
+local accuracy, missingness and consistency \citep{lundberg2017unified}, and
+TreeSHAP makes exact computation tractable for tree ensembles
+\citep{lundberg2020local}. Within consumer analytics, SHAP and related
+methods have been applied to customer lifetime value
+\citep{bauer2021improved, sun2023research}, relationship-oriented customer
+analytics \citep{kitchens2018advanced}, churn, fraud and conversion
+prediction. Counterfactual explanation offers a complementary,
+action-oriented perspective, identifying minimal feature changes that would
+alter a prediction \citep{you2023counterfactual, oliveira2023model,
+balbino2023csse, mertes2022ganterfactual}.
+
+Two limitations of this literature motivate the present study. First,
+explanation methods are themselves fallible: different explainers may
+produce substantially different accounts of the same prediction---the
+Rash\^omon effect---and even repeated applications of one explainer can
+disagree \citep{mitrut2024clarity}; adversarial constructions can actively
+mislead perturbation-based explainers \citep{slack2020fooling}. This argues
+for treating explanation quality as an empirical property to be measured,
+not assumed \citep{bhatt2020evaluating, hedstrom2023quantus}. Second, and
+more fundamentally, both attribution and counterfactual methods share a
+temporal assumption: explanations are generated from the complete feature
+representation available after the session has concluded. Neither paradigm
+constrains the explanation to the information actually observable at the
+decision point it is meant to support.
+
+\subsection{Temporal validity and prefix-based inference}
+\label{sec:related-temporal}
+
+The principle that future observations must not contribute to operational
+predictions is firmly established in predictive process monitoring.
+\citet{verenich2019survey} benchmark remaining-time prediction across
+real-world event logs; \citet{cao2022transition} predict cycle-containing
+process durations; \citet{chen2022multi} and \citet{oberdorf2022predictive}
+extend prefix-based prediction to multi-task and enterprise-scale settings.
+The methodological contribution of this literature is not any particular
+architecture but the explicit enforcement of temporal consistency between
+the information available at prediction time and the information supplied to
+the model.
+
+Extensions of this discipline to \emph{explanation} are scarce.
+\citet{wickramanayake2023generating} generate multi-level explanations for
+process outcome predictions, and \citet{mehdiyev2024quantifying} quantify
+and explain predictive uncertainty in process monitoring, but neither
+examines whether attributions computed at prefix length $k$ remain
+consistent with those computed at $k+1$. In survival analysis,
+time-dependent explanation methods---SurvSHAP(t)
+\citep{krzyzinski2022survshap} and SurvLIME \citep{kovalev2020survlime}---model
+how feature effects evolve over time, yet they operate on the complete
+observed trajectory rather than restricting each explanation to the
+information available at successive decision points. Latent-feature saliency
+for deep time-series classifiers raises the related concern that
+input-space attributions may miss the representations models actually use
+\citep{schroder2023latent}. Fairness-aware session-based recommendation
+\citep{wu2023faster} likewise adapts model behaviour during the session,
+underscoring that operational decisions are made mid-sequence.
+
+\subsection{Limitations of whole-session SHAP for sequential journeys}
+\label{sec:related-limitations}
+
+Synthesising these streams, four limitations of conventional SHAP practice
+in customer journey analytics can be stated precisely.
+
+\emph{(i) Retrospective computation.} SHAP values are computed after the
+model has access to the full feature vector, so explanations describe
+completed sessions rather than the information available when an
+intervention decision was required.
+
+\emph{(ii) Future-information leakage.} Because the attribution operates on
+the complete session, features realised after the decision point receive
+non-zero credit. Such attributions are not merely unavailable in
+deployment; they are conceptually misleading, since they cite behaviour that
+had not yet occurred.
+
+\emph{(iii) Static attribution in a dynamic process.} A single attribution
+profile implicitly assumes feature importance is constant across the
+journey, an assumption at odds with staged models of consumer behaviour
+\citep{bucklin2003model, sismeiro2004modeling, montgomery2004modeling}.
+
+\emph{(iv) Absent validation.} Explanations are rarely evaluated beyond
+visualisation; stability, reproducibility and faithfulness across journey
+stages are almost never measured, despite documented disagreement between
+and within explainers \citep{mitrut2024clarity}.
+
+\subsection{Research gap and positioning}
+\label{sec:related-gap}
+
+No existing work jointly delivers temporally valid, stage-specific
+explanations \emph{and} evaluates their quality across the journey
+(Figure~\ref{fig:gap}). Sequential prediction research supplies temporal
+discipline without explanation; consumer-analytics XAI supplies explanation
+without temporal discipline; process monitoring supplies prefix-constrained
+prediction with, at most, unvalidated prefix explanations. The framework
+developed below occupies the intersection: prefix-constrained prediction,
+prefix-constrained attribution, and quantitative validation of the
+resulting explanations, instantiated end-to-end on a large e-commerce
+clickstream.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{diag2_gap.pdf}
+\caption{Positioning of the proposed framework at the intersection of three
+literatures: sequential purchase prediction, Shapley-based explanation, and
+explanation-quality evaluation. Each pairwise intersection is populated;
+their three-way intersection is presently sparse in the applied literature.}
+\label{fig:gap}
+\end{figure}
+
+Table~\ref{tab:positioning} summarises the comparison with the
+closest-related explanation methods.
+
+\begin{table*}[t]
+\centering
+\caption{Positioning relative to sequence-aware explanation methods.}
+\label{tab:positioning}
+\small
+\begin{tabular}{@{}lllll@{}}
+\toprule
+\textbf{Method} & \textbf{Attribution unit} & \textbf{Temporal constraint} &
+\textbf{Validation} & \textbf{Domain} \\
+\midrule
+TimeSHAP \citep{bento2021timeshap} & event/timestep/feature & none (full sequence) & -- & generic \\
+WindowSHAP \citep{nayebi2023windowshap} & time window & none (full series) & -- & clinical \\
+SurvSHAP(t) \citep{krzyzinski2022survshap} & feature over time & none (full trajectory) & -- & survival \\
+\textbf{This work} & \textbf{feature, per funnel stage} & \textbf{stage cut-point (prefix only)} &
+\textbf{faithfulness, stability, seed and cross-paradigm consistency} & \textbf{e-commerce} \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+%==============================================================================
+\section{Conceptual framework}
+\label{sec:framework}
+%==============================================================================
+
+The framework reconceptualises purchase prediction as a sequence of
+temporally constrained decision problems rather than a single classification
+task performed after session completion. Its central premise is that
+prediction and explanation must satisfy the same information constraint:
+each funnel stage is an independent decision problem in which behaviour is
+represented by the event prefix observable at that stage, purchase
+probability is estimated from that prefix, and the Shapley explanation is
+computed from exactly the same representation.
+Figure~\ref{fig:architecture} presents the architecture. Its essential
+property is visible in the topology: both explanation layers---TreeSHAP
+over the stage models and TimeSHAP over the recurrent arm---descend from
+the \emph{same} nested prefix representation that feeds prediction, rather
+than from a separate whole-session view, and no path in the diagram reaches
+an explanation without passing through the prefix construction. The
+validation layer then consumes both explanation streams, so the framework's
+terminal output is not an attribution but a \emph{validated} attribution:
+trajectory plus quality evidence. Temporal validity is thus enforced
+structurally, at the point where representations are constructed, rather
+than procedurally by convention within each analysis. The layers are
+formalised below.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{diag1_architecture.pdf}
+\caption{Architecture of the Funnel-Stage SHAP framework. Raw clickstream
+events are reconstructed into ordered sessions; sessions are partitioned
+into nested stage prefixes; an independent model is fitted per stage on its
+prefix features; explanations are computed per stage from the same prefix;
+and a validation layer tests faithfulness, stability and reproducibility.}
+\label{fig:architecture}
+\end{figure*}
+
+\subsection{Sessions as sequential behavioural processes}
+\label{sec:framework-sessions}
+
+Let $\mathcal{S} = \{S_1, \dots, S_N\}$ denote the collection of customer
+sessions extracted from the clickstream. Each session is an ordered event
+sequence $S_i = (e_1, \dots, e_{T_i})$ in which every event
+$e_t = (u_t, t, a_t, p_t, c_t)$ records the customer identifier, timestamp,
+interaction type, product and category. The binary outcome
+$Y_i \in \{0, 1\}$ indicates whether the session ends in a purchase. This
+representation treats behaviour as a stochastic process observed through
+time: the information available for inference expands as events accumulate.
+
+\subsection{Funnel stages and observable event prefixes}
+\label{sec:framework-prefixes}
+
+For session $S_i$, let $\tau_k(S_i)$ denote the cut-point associated with
+funnel stage $k \in \{1, 2, 3\}$. The observable history at stage $k$ is the
+event prefix
+\begin{equation}
+P_k(S_i) \;=\; \{\, e_t \in S_i : t \le \tau_k(S_i) \,\},
+\label{eq:prefix}
+\end{equation}
+and by construction the prefixes are nested,
+$P_1(S_i) \subseteq P_2(S_i) \subseteq P_3(S_i)$: later stages contain all
+earlier behavioural evidence together with newly accumulated interactions.
+Writing $\mathcal{I}_k = \sigma(P_k)$ for the information set generated by
+the stage-$k$ prefix, temporal validity is the requirement that every
+stage-$k$ quantity---features, prediction and explanation---be measurable
+with respect to $\mathcal{I}_k$. No event occurring after the cut-point may
+influence any of them.
+
+\subsection{Stage-specific behavioural representation}
+\label{sec:framework-features}
+
+A stage-specific feature mapping
+$\Phi_k : P_k \rightarrow \mathbf{x}^{(k)} \in \mathbb{R}^{d_k}$ transforms
+each observable prefix into a structured representation covering interaction
+counts, temporal pacing, engagement intensity, navigation entropy, browsing
+velocity and price context. The defining property is temporal consistency:
+\begin{equation}
+\mathbf{x}^{(k)} = \Phi_k\!\left(P_k\right),
+\qquad
+\frac{\partial \mathbf{x}^{(k)}}{\partial e_t} = 0
+\;\;\text{for all}\;\; t > \tau_k,
+\label{eq:temporal-consistency}
+\end{equation}
+so that no feature depends on events after the stage cut-point. This
+eliminates the principal source of leakage in post-hoc explainability at the
+representation level, before any model is fitted.
+
+\subsection{Stage-specific prediction}
+\label{sec:framework-prediction}
+
+Rather than a single global decision function, an independent model
+$f_k : \mathbb{R}^{d_k} \rightarrow [0, 1]$ is estimated per stage,
+\begin{equation}
+\hat{p}^{(k)}_i \;=\; f_k\!\left(\mathbf{x}^{(k)}_i\right)
+\;=\; \mathbb{P}\!\left(Y_i = 1 \,\middle|\, \mathbf{x}^{(k)}_i\right),
+\label{eq:stage-model}
+\end{equation}
+with parameters $\theta_1, \theta_2, \theta_3$ estimated independently.
+This acknowledges that the statistical relationship between observed
+behaviour and conversion need not be stationary across the journey, and it
+makes the stage models conditional by construction: the stage-$k$ model is
+fitted on sessions that reached stage $k$, a property whose consequences for
+interpretation are developed in Section~\ref{sec:results-descriptive}.
+
+\subsection{Prefix-constrained SHAP explanations}
+\label{sec:framework-shap}
+
+For each stage model, TreeSHAP decomposes the prediction additively,
+\begin{equation}
+f_k(\mathbf{x}) \;=\; \phi^{(k)}_0 + \sum_{j=1}^{d_k} \phi^{(k)}_j,
+\label{eq:shap}
+\end{equation}
+where $\phi^{(k)}_0$ is the expected model output over a background sample
+and $\phi^{(k)}_j$ the contribution of feature $j$ at stage $k$. Because the
+explanation operator $\Psi_k : (\mathbf{x}^{(k)}, f_k) \mapsto
+\boldsymbol{\phi}^{(k)}$ receives the same prefix-constrained representation
+used for prediction, no attribution can cite behaviour that had not yet
+occurred when the prediction was produced. Temporal validity extends from
+prediction to explanation by construction rather than by convention.
+
+\subsection{Attribution trajectories}
+\label{sec:framework-trajectories}
+
+Because independent explanations are produced at successive stages, each
+feature (or feature family) $j$ generates a sequence of stage-conditioned
+attributions,
+\begin{equation}
+\mathcal{T}_j \;=\; \left(\phi^{(1)}_j,\; \phi^{(2)}_j,\; \phi^{(3)}_j\right),
+\label{eq:trajectory}
+\end{equation}
+its \emph{attribution trajectory}. Trajectories turn explanation from a
+static description of one completed prediction into a longitudinal object:
+they reveal how predictive evidence emerges, strengthens, weakens or
+disappears as the journey unfolds. Whether a trajectory deserves substantive
+interpretation, however, is an empirical question---trajectories are only
+meaningful if the underlying explanations are faithful, stable and
+reproducible, which motivates the validation layer of
+Section~\ref{sec:methods-validation}.
+
+%==============================================================================
+\section{Methods and materials}
+\label{sec:methods}
+%==============================================================================
+
+\subsection{Research design}
+\label{sec:methods-design}
+
+The study follows a design science research methodology
+\citep{hevner2004design}: the objective is not only to investigate a
+phenomenon but to construct and rigorously evaluate an artifact---the
+Funnel-Stage SHAP framework---that addresses the methodological gap
+identified in Section~\ref{sec:related-gap}. Consistent with the DSR
+build--evaluate cycle (Figure~\ref{fig:dsr}), the artifact is instantiated
+end-to-end and evaluated against pre-registered hypotheses, with every
+deviation from the frozen protocol logged with date, rationale and affected
+sections (Appendix~A).
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{diag4_dsr.pdf}
+\caption{The design science research cycle as instantiated in this study:
+problem identification, artifact design, instantiation on two datasets,
+pre-registered evaluation, and a public amendment log closing the loop.}
+\label{fig:dsr}
+\end{figure}
+
+The evaluation is organised around four pre-registered hypotheses. H1,
+addressing RQ1, expected prevalence-normalised predictive performance to
+rise monotonically from exploration to purchase intent as behavioural
+evidence accumulates. H2, addressing RQ2, expected engagement-related
+features to gain attribution mass across stages while contextual features
+lose it. H3 held that navigation entropy and click velocity carry predictive
+information beyond baseline aggregate features. H4, addressing RQ3, expected
+tree-based and recurrent attributions to agree on their shared concepts,
+with Spearman $\rho > 0.6$ as the pre-registered criterion. Every analytic
+decision---stage definitions, feature dictionary, splits, seeds, metrics,
+thresholds and statistical procedures---was fixed before the test partition
+was opened, and the frozen seed list $\{7, 17, 29, 42, 87\}$ governs all
+seeded procedures.
+
+\subsection{Data sources}
+\label{sec:methods-data}
+
+Two complementary datasets serve distinct methodological purposes;
+predictive performance obtained on one is not comparable with the other.
+
+\textbf{Benchmark dataset (Dataset A).} The Online Shoppers Purchasing
+Intention dataset \citep{sakar2019real}, 12,330 sessions with 15.47\%
+prevalence, is used to select the model family under standardised
+whole-session conditions and to demonstrate the leakage critique concretely:
+its strongest predictor, \texttt{PageValues}, is measured post-transaction.
+Because its variables are whole-session aggregates, Dataset~A cannot support
+stage-specific prediction; it functions as a benchmark and as the static
+comparator, not as an instantiation of the framework.
+
+\textbf{Event-level clickstream (Dataset B).} The primary evaluation uses
+the REES46 multi-category e-commerce clickstream (October 2019 partition):
+42{,}448{,}764 events with timestamps, interaction types, product, category,
+price and user identifiers. Provenance is recorded by SHA-256 checksum, and
+all preprocessing is scripted and seeded. Event-level resolution is what
+permits the reconstruction of nested behavioural prefixes with temporal
+consistency guaranteed at the representation level.
+
+\subsection{Journey reconstruction and stage construction}
+\label{sec:methods-journey}
+
+\textbf{Sessionisation.} Events are cleaned, chronologically ordered and
+grouped into sessions using a 30-minute inactivity threshold: a new session
+begins whenever the gap between consecutive events of the same user exceeds
+$\delta = 30$ minutes (sensitivity to $\delta$ is evaluated in
+Section~\ref{sec:results-sensitivity}). The full corpus yields 5{,}366{,}181
+sessions; a seeded, user-level subsample of 200{,}000 users---permitted by
+the protocol for tractability---yields the analytical dataset of 485{,}459
+sessions. Figure~\ref{fig:dataflow} reports the complete data-flow
+accounting from raw events to modelled sessions. Two properties of this
+accounting matter for the validity of everything downstream. First, every
+exclusion is enumerated---malformed events, boundary-straddling users,
+sessions failing stage reachability---so the population each model is fitted
+on can be reconstructed exactly, and no filtering step can silently shift
+the prevalence being modelled. Second, the largest single reduction is
+deliberate (the seeded user subsample) rather than incidental, which is what
+allows the sample-size sensitivity analysis of
+Section~\ref{sec:results-sensitivity} to interpret the 400{,}000-user
+superset as a controlled enlargement rather than a different draw.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{fig1_data_flow.pdf}
+\caption{Data flow from 42.4M raw events to the analytical dataset. Every
+exclusion step is counted; no step discards sessions silently.}
+\label{fig:dataflow}
+\end{figure}
+
+\textbf{Stage cut-points.} Three modelled stages operationalise the funnel:
+S1 (\emph{early exploration}: session entry, cut at the initial catalogue
+interactions), S2 (\emph{active consideration}: sustained product/category
+browsing), and S3 (\emph{purchase intent}: cart activity begins). The
+checkout stage S4 is defined for descriptive statistics but is deliberately
+not modelled: its cut-point is the purchase event itself, so any S4 prefix
+would contain the label. Cut-point definitions were amended on the basis of
+measurement before the test partition was opened; the amendments are logged.
+Figure~\ref{fig:prefix} illustrates the construction on a single session:
+each stage's model sees only the events to the left of its cut-point, the
+three prefix bars nest ($S1 \subseteq S2 \subseteq S3$), and the purchase
+event itself sits in the shaded region marked \emph{never in any
+prefix}---the portion of the session that conventional whole-session
+explanation would consume, excluded here from features, prediction and
+attribution alike. The figure also makes the checkout-stage exclusion
+self-evident: the purchase event \emph{is} the label, so no admissible
+prefix for it exists.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{diag3_prefix.pdf}
+\caption{The anti-leakage prefix protocol, illustrated on a single session.
+Each stage model sees only events up to its cut-point; the prefixes nest,
+and the purchase event (shaded, ``never in any prefix'') is excluded from
+features, prediction and explanation alike, so no feature can be computed
+from the outcome it predicts.}
+\label{fig:prefix}
+\end{figure}
+
+\subsection{Stage-specific feature engineering}
+\label{sec:methods-features}
+
+Features are computed independently per stage, exclusively from the stage
+prefix, and organised into families: behavioural activity counts (event,
+view, cart counts; unique products; revisit rates), temporal dynamics
+(prefix duration, inter-event times, dwell times, last gap), behavioural
+diversity (category entropy, raw and normalised; distinct-transition rate),
+engagement intensity (events per active minute), navigation velocity (click
+velocity), contextual price features (mean and maximum price observed), and
+calendar context (hour of day, weekend indicator). The resulting matrices
+contain 19--23 features per stage with no constant columns; a feature
+dictionary with per-stage availability accompanies the repository. Because a
+two-event S1 prefix renders several engagement and temporal features
+numerically identical, correlated features are grouped for attribution
+analysis (Section~\ref{sec:methods-explain}).
+
+\subsection{Splitting and experimental protocol}
+\label{sec:methods-splits}
+
+Two protocols are frozen to disk before any model is fitted; every model and
+explanation reads the frozen splits, and the test partition is opened
+exactly once, at final evaluation.
+
+The \textbf{temporal split} (headline) assigns each user to a period by
+their first session and cuts on that boundary, so it is simultaneously
+ordered in time and identity-clean---stricter than a purely date-based cut,
+which would let a returning visitor appear on both sides. Users whose
+activity straddles a boundary are dropped and counted (51{,}256 of 200{,}000
+users) rather than reassigned. The \textbf{grouped split} (robustness)
+partitions users at random; it is identity-clean but not time-ordered. A
+naive random split by session is never used. For Dataset~A, which lacks user
+identifiers, sessions are partitioned on month boundaries chosen by
+exhaustive search for the split closest to 70/15/15; the December test month
+differs distributionally from the training months by a factor of
+approximately fifteen in places, a drift whose consequences
+Section~\ref{sec:results-sensitivity} exploits deliberately.
+
+\subsection{Stage-specific prediction, calibration and imbalance}
+\label{sec:methods-prediction}
+
+Five model families are evaluated on Dataset~A---logistic regression,
+random forest \citep{breiman2001random}, XGBoost, LightGBM and
+CatBoost---and LightGBM is carried forward to the stage models, where exact
+TreeSHAP is available. Class imbalance is handled by class weighting inside
+training folds only; SMOTE \citep{chawla2002smote} was available but is not
+used in reported runs.
+
+Probabilities are calibrated with isotonic regression fitted on a dedicated
+20\% slice of the \emph{training period}, drawn once per stage so that every
+seed and feature set is calibrated on identical rows. Calibrating on the
+validation month instead---the textbook location---raises expected
+calibration error \citep{guo2017calibration} by an order of magnitude under
+the prior shift present in these data
+(Section~\ref{sec:results-sensitivity}); prior-shift correction follows
+\citet{saerens2002adjusting}. Operating thresholds are selected on
+validation by F1.
+
+\subsection{Hyperparameter optimisation}
+\label{sec:methods-tuning}
+
+Headline stage models use the libraries' default hyperparameters. A tuning
+study---Optuna \citep{akiba2019optuna} TPE search, 100 trials per stage over
+fixed search spaces, maximising validation PR-AUC---is reported as a
+robustness analysis (Section~\ref{sec:results-sensitivity}). A held-out
+validation set is used rather than nested cross-validation because the
+temporal split forbids shuffling folds across the time boundary. Search
+spaces are fixed in source code so a run cannot silently widen them, and
+studies persist to reopenable storage. Keeping defaults as the headline
+keeps the explanation layers attached to the exact models they explain;
+tuning improves S3 and changes no conclusion. Tuning and threshold selection
+both touch the validation partition, a double use acknowledged in
+Section~\ref{sec:limitations}.
+
+\subsection{Explanation protocol}
+\label{sec:methods-explain}
+
+\textbf{Layer 1 --- stage-conditioned TreeSHAP.} Interventional TreeSHAP
+\citep{lundberg2020local} is computed per stage against a background sample
+drawn from training rows only. Correlated features are clustered by absolute
+Spearman correlation and their attributions summed, which is licensed by the
+additivity of Shapley values \citep{aas2021explaining}; the clustering is
+fixed across stages and taken from the earliest, coarsest stage.
+Attributions are computed on the validation partition; the test partition is
+reserved for predictive evaluation.
+
+\textbf{Layer 2 --- recurrent attribution.} A GRU is trained per stage on
+the \emph{same prefixes} as the tree models and explained with TimeSHAP
+\citep{bento2021timeshap}. Training the recurrent arm on whole sessions
+would have let it see the purchase event, breaking the prefix protocol for
+that arm alone and rendering the cross-paradigm comparison meaningless.
+
+\subsection{Explanation validation layer}
+\label{sec:methods-validation}
+
+Layer 3 evaluates explanation quality along four axes
+(Figure~\ref{fig:validation}), with pass thresholds fixed in advance:
+faithfulness correlation $> 0.5$; cross-seed and cross-paradigm Spearman
+$> 0.6$.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{diag5_validation.pdf}
+\caption{The explanation validation layer: faithfulness (attribution vs.\
+measured effect of removal), deletion/insertion curves, stability under
+input perturbation (local Lipschitz), and reproducibility across the five
+frozen seeds and across explanation paradigms.}
+\label{fig:validation}
+\end{figure}
+
+\emph{Faithfulness} is the \citet{bhatt2020evaluating} correlation between
+attributed importance and the measured change in model output when the
+feature is removed, with removal implemented as replacement by a background
+value rather than by zero---zero is a valid in-distribution value for most
+features and removes no information. \emph{Deletion and insertion curves}
+\citep{petsiuk2018rise} order features by signed attribution, since the
+claim under test is that removing features that push the prediction up
+causes it to fall. \emph{Stability} is a local Lipschitz estimate
+\citep{alvarezmelis2018robustness}: the ratio of attribution change to input
+perturbation under Gaussian noise. \emph{Consistency} is the Spearman rank
+correlation of importance orderings across the five frozen seeds, and
+between paradigms (H4)---the latter evaluated both on aggregate rankings and
+per instance.
+
+\subsection{Evaluation metrics and statistical analysis}
+\label{sec:methods-stats}
+
+PR-AUC is the primary metric, as appropriate under class imbalance
+\citep{davis2006relationship, saito2015precision}. Because chance-level
+PR-AUC equals the prevalence, and prevalence differs by a factor of six
+across stages, cross-stage comparison uses \textbf{PR-AUC lift}---PR-AUC
+divided by prevalence---alongside the prevalence-free ROC-AUC. Reporting raw
+PR-AUC across stages would report prevalence as though it were skill.
+Calibration is summarised by expected calibration error
+\citep{guo2017calibration}. ROC-AUC differences
+on identical test sets use the DeLong procedure
+\citep{delong1988comparing, sun2014fast}; PR-AUC differences use stratified
+paired bootstrap confidence intervals (2{,}000 resamples). The confirmatory
+family of nine stage-level contrasts is Holm-corrected
+\citep{holm1979simple}; with five seeds, the minimum attainable Wilcoxon
+$p$-value is 0.0625, so seed-level tests are reported descriptively and
+inference rests on the bootstrap intervals. All results are reported over
+the five frozen seeds as mean $\pm$ standard deviation.
+
+%==============================================================================
+\section{Results}
+\label{sec:results}
+%==============================================================================
+
+\subsection{Descriptive analysis of the reconstructed journeys}
+\label{sec:results-descriptive}
+
+Table~\ref{tab:stages} characterises the three modelled stages. Reach and
+prevalence differ sharply: 97.9\% of sessions reach S1 with 8.85\% purchase
+prevalence; 48.0\% reach S2 at 6.83\%; 9.3\% reach S3 at 52.10\%.
+
+\begin{table}[t]
+\centering
+\caption{Funnel stages on the analytical dataset (485{,}459 sessions).
+Prevalence is conditional on reaching the stage.}
+\label{tab:stages}
+\small
+\begin{tabular}{@{}lS[table-format=6.0]S[table-format=1.3]S[table-format=1.4]@{}}
+\toprule
+\textbf{Stage} & {\textbf{Sessions}} & {\textbf{Reach}} & {\textbf{Prevalence}} \\
+\midrule
+S1 (exploration)   & 475140 & 0.979 & 0.0885 \\
+S2 (consideration) & 233160 & 0.480 & 0.0683 \\
+S3 (intent)        & 45031  & 0.093 & 0.5210 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The dip at S2 is a property of the stage construction, not of behaviour:
+sessions that proceed directly from initial browsing to an early cart
+addition bypass the consideration milestone, and because such sessions
+exhibit comparatively strong intent, their exclusion mechanically lowers S2
+prevalence. More generally, although the behavioural prefixes are nested,
+$P_1 \subseteq P_2 \subseteq P_3$, the corresponding \emph{populations} are
+not: $R_2 \not\supseteq R_3$, where $R_k$ is the set of sessions reaching
+stage $k$. Differences across stages therefore reflect both accumulating
+information and changing populations, and every cross-stage comparison in
+this section is read with Table~\ref{tab:stages} alongside it. The
+improvement curve is a conditional claim, and the validation procedures of
+Section~\ref{sec:results-quality} are what separate genuine behavioural
+evolution from composition effects.
+
+\subsection{Predictive performance across the funnel (RQ1, H1)}
+\label{sec:results-performance}
+
+Dataset~A results (Table~\ref{tab:baselines}) establish the model family on
+the month-ordered split with December held out, over five seeds. CatBoost
+leads on PR-AUC; LightGBM is statistically comparable and is carried forward
+because exact TreeSHAP is available for it. Logistic regression's zero
+standard deviation is correct rather than anomalous: with a fixed split and
+a convex objective, the fit is deterministic.
+
+\begin{table}[t]
+\centering
+\caption{Dataset A baselines (month-ordered split, five seeds). ECE is
+expected calibration error before and after the calibration correction of
+Section~\ref{sec:methods-prediction}.}
+\label{tab:baselines}
+\small
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Model} & \textbf{PR-AUC} & \textbf{ROC-AUC} &
+\textbf{ECE (unc.)} & \textbf{ECE (cal.)} \\
+\midrule
+CatBoost            & $0.699 \pm 0.006$ & 0.905 & 0.063 & 0.018 \\
+Random forest       & $0.685 \pm 0.006$ & 0.910 & 0.096 & 0.015 \\
+LightGBM            & $0.677 \pm 0.008$ & 0.899 & 0.065 & 0.026 \\
+XGBoost             & $0.676 \pm 0.005$ & 0.902 & 0.036 & 0.018 \\
+Logistic regression & $0.583 \pm 0.000$ & 0.879 & 0.203 & 0.032 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Dataset~B stage models are reported in Table~\ref{tab:stage-models} and
+Figures~\ref{fig:curve} and~\ref{fig:stageperf}.
+
+\begin{table*}[t]
+\centering
+\caption{Stage models on the temporal split (LightGBM, default
+hyperparameters, five seeds). Chance-level PR-AUC equals the prevalence, so
+the lift column carries the cross-stage comparison. $N$ is the test
+partition size.}
+\label{tab:stage-models}
+\small
+\begin{tabular}{@{}lS[table-format=5.0]S[table-format=1.3]cS[table-format=1.2]S[table-format=1.4]S[table-format=1.3]@{}}
+\toprule
+\textbf{Stage} & {$N$ (test)} & {\textbf{Prevalence}} & \textbf{PR-AUC} &
+{\textbf{PR-AUC lift}} & {\textbf{ROC-AUC}} & {\textbf{ECE}} \\
+\midrule
+S1 & 38059 & 0.073 & $0.1312 \pm 0.0009$ & \bfseries 1.79 & 0.6406 & 0.010 \\
+S2 & 17884 & 0.059 & $0.0834 \pm 0.0015$ & \bfseries 1.41 & 0.6198 & 0.011 \\
+S3 & 2973  & 0.521 & $0.5681 \pm 0.0041$ & \bfseries 1.09 & 0.5695 & 0.017 \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{fig2_improvement_curve.pdf}
+\caption{The improvement curve (RQ1). Left: raw PR-AUC tracks its chance
+level (the stage prevalence) almost point for point, including the shared
+dip at S2. Right: the prevalence-normalised lift falls monotonically toward
+the chance line, and ROC-AUC falls with it.}
+\label{fig:curve}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{fig7_stage_performance.pdf}
+\caption{Stage-wise performance in full: (a) PR-AUC against its chance
+level with lift annotations; (b) prevalence-free ROC-AUC with seed error
+bars; (c) expected calibration error with Brier scores against their
+reference values.}
+\label{fig:stageperf}
+\end{figure}
+
+\textbf{H1 is not supported; the direction of the effect is reversed.}
+Figure~\ref{fig:curve} makes the reversal visible in a single frame. In the
+left panel, raw PR-AUC ends at 0.568 against a starting 0.131, and a naive
+reading would conclude that prediction improves dramatically as customers
+approach purchase; but the chance-level curve tracks it almost point for
+point, because chance-level PR-AUC equals the prevalence and prevalence
+varies six-fold across the conditional stage populations---even the dip
+both curves share at S2 is a prevalence phenomenon
+(Section~\ref{sec:results-descriptive}), not a modelling one. The right
+panel divides one curve by the other, and the resulting lift falls
+monotonically from 1.79 toward the chance line at 1.0, reaching 1.09 at S3.
+Figure~\ref{fig:stageperf} completes the picture with the two quantities
+that cannot be attributed to base rates: panel~(b) shows ROC-AUC, which is
+prevalence-free, declining in parallel from 0.641 to 0.569 with seed error
+bars far smaller than the between-stage differences (seed standard
+deviations 0.0009--0.0041), and panel~(c) shows expected calibration error
+holding at 0.010--0.017 throughout, so the decline is a ranking phenomenon,
+not a probability artefact. Together the panels support a single reading:
+by the intent stage the model is barely above its own base rate, and nearly
+all of S3's apparently strong PR-AUC is prevalence, not skill.
+
+The design does not isolate the mechanism. Three explanations remain
+compatible with the data: residual outcome uncertainty may genuinely shrink
+as checkout approaches, leaving little for behaviour to discriminate; the
+reachability conditions induce progressively more homogeneous populations;
+and the S3 evaluation set is small (2{,}973 test sessions), inflating
+estimation uncertainty. Section~\ref{sec:discussion-decline} develops the
+interpretation.
+
+\subsection{Feature-family ablation (H3)}
+\label{sec:results-ablation}
+
+Table~\ref{tab:ablation} reports the pre-registered nine-contrast family
+with stratified paired bootstrap intervals and Holm correction.
+
+\begin{table*}[t]
+\centering
+\caption{Feature-family contrasts (PR-AUC differences, five seeds, 2{,}000
+stratified bootstrap resamples). ``Excludes 0'' refers to the 95\%
+bootstrap interval of the difference. With five seeds the minimum attainable
+Wilcoxon $p$ is 0.0625, so seed-level tests are descriptive.}
+\label{tab:ablation}
+\small
+\begin{tabular}{@{}llS[table-format=+1.4]S[table-format=+1.4]S[table-format=+1.4]c@{}}
+\toprule
+\textbf{Stage} & \textbf{Contrast} & {$\Delta$PR-AUC} &
+{\textbf{CI low}} & {\textbf{CI high}} & \textbf{Excludes 0} \\
+\midrule
+S1 & temporal vs.\ baseline           & +0.0102 & +0.0045 & +0.0167 & yes \\
+S1 & entropy+velocity vs.\ baseline   & +0.0038 & -0.0002 & +0.0084 & no  \\
+S1 & entropy+velocity beyond temporal & -0.0006 & -0.0017 & +0.0005 & no  \\
+S2 & temporal vs.\ baseline           & +0.0120 & +0.0057 & +0.0197 & yes \\
+S2 & entropy+velocity vs.\ baseline   & +0.0035 & -0.0011 & +0.0085 & no  \\
+S2 & entropy+velocity beyond temporal & +0.0007 & -0.0017 & +0.0031 & no  \\
+S3 & temporal vs.\ baseline           & +0.0139 & -0.0074 & +0.0370 & no  \\
+S3 & entropy+velocity vs.\ baseline   & +0.0156 & -0.0027 & +0.0346 & no  \\
+S3 & entropy+velocity beyond temporal & +0.0018 & -0.0045 & +0.0085 & no  \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+Temporal pacing features contribute measurably at S1 and S2 (+0.0102 and
++0.0120, intervals excluding zero; 8.2\% and 16.6\% relative to the
+respective baselines). \textbf{H3 is not supported}: the direct contrast of
+entropy and velocity against baseline never excludes zero, and their
+marginal contribution beyond temporal features is indistinguishable from
+zero at every stage---the two families are largely redundant. At S3 no
+contrast is decidable; the wide intervals reflect the small evaluation set,
+and the honest conclusion is undetectability under the available power, not
+absence of effect.
+
+The ablation carries a methodological point that frames the next section:
+predictive contribution and explanatory attribution are distinct
+quantities. A feature family can receive substantial SHAP credit while
+contributing little \emph{unique} predictive information, when the
+information it carries is shared with correlated features. Exactly this
+pattern appears below.
+
+\subsection{Attribution trajectories (RQ2, H2)}
+\label{sec:results-migration}
+
+Table~\ref{tab:migration} and Figures~\ref{fig:migration}
+and~\ref{fig:alluvial} report the share of mean absolute SHAP mass per
+feature family and stage, with correlated features grouped as described in
+Section~\ref{sec:methods-explain}.
+
+\begin{table}[t]
+\centering
+\caption{Attribution share by feature family and stage (proportion of mean
+absolute SHAP mass; columns sum to 1 up to rounding).}
+\label{tab:migration}
+\small
+\begin{tabular}{@{}lS[table-format=1.3]S[table-format=1.3]S[table-format=1.3]@{}}
+\toprule
+\textbf{Family} & {\textbf{S1}} & {\textbf{S2}} & {\textbf{S3}} \\
+\midrule
+Price context            & 0.437 & 0.239 & 0.379 \\
+Product views / revisits & 0.192 & 0.033 & 0.057 \\
+Engagement / temporal    & 0.169 & 0.368 & 0.338 \\
+Hour of day              & 0.157 & 0.125 & 0.133 \\
+Navigation / categories  & 0.035 & 0.224 & 0.074 \\
+Weekend indicator        & 0.010 & 0.011 & 0.020 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{fig3_attribution_migration.pdf}
+\caption{Attribution migration across stages (RQ2). Engagement rises and
+stabilises; product views collapse after S1; navigation peaks sharply at
+consideration.}
+\label{fig:migration}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{fig8_migration_alluvial.pdf}
+\caption{Alluvial view of the same migration: each band is a feature
+family's attribution share flowing across stages.}
+\label{fig:alluvial}
+\end{figure}
+
+Four trajectories carry the substantive story, and the two figures render
+them at complementary granularities: Figure~\ref{fig:migration} plots each
+family's share as a line across stages, making slopes and reversals legible,
+while the alluvial rendering of Figure~\ref{fig:alluvial} shows the same
+mass flowing between stages, making visible how the \emph{composition} of
+the model's evidence base is reorganised even where individual shares change
+modestly. \emph{Engagement and temporal} features rise from 16.9\% at
+exploration to 36.8\% at consideration, stabilising at 33.8\% before
+purchase: sustained interaction becomes the dominant evidence as intent
+consolidates. \emph{Product-view} features collapse from 19.2\% to 3.3\%:
+browsing breadth is informative early and largely subsumed later, and in the
+alluvial view this family's band visibly narrows to a thread after S1.
+\emph{Navigation and category} features are the clearest non-monotone case,
+rising from 3.5\% to 22.4\% at consideration before falling back to
+7.4\%---most informative precisely when customers compare alternatives. In
+Figure~\ref{fig:migration} this appears as the sharpest mid-funnel peak in
+the panel, and it is exactly the shape that whole-session attribution
+destroys: a static analysis assigns this family 11.1\% throughout, against
+a stage-conditioned peak of 22.4\%, so the most distinctive temporal
+structure in the explanation is averaged into invisibility. \emph{Price} remains influential at every stage (43.7\%,
+23.9\%, 37.9\%), indicating that price context conditions the journey
+throughout rather than operating only at selection; its dip at
+consideration mirrors, almost exactly, the navigation peak, suggesting that
+mid-funnel the model temporarily trades contextual evidence for behavioural
+evidence before returning to price as the decisive signal at intent.
+
+\textbf{H2 is partially supported.} Its behavioural component holds
+directionally---engagement gains mass across stages. Its contextual
+component is untestable: Dataset~B contains no traffic-source or device
+variables, and rather than proxy them we report the sub-hypothesis as
+untested. The apparent tension with the ablation---navigation entropy
+receives 22.4\% of S2 attribution yet adds no detectable unique predictive
+value---is the predicted consequence of correlated families sharing
+information (Section~\ref{sec:results-ablation}), not a contradiction:
+ablation measures unique contribution after accounting for the rest of the
+model, while Shapley attribution allocates credit among correlated
+features.
+
+Because stage populations differ (Section~\ref{sec:results-descriptive}),
+trajectories are read as stage-conditioned explanation profiles rather than
+within-session causal evolution; their reliability is established next.
+
+\subsection{Explanation quality (RQ3)}
+\label{sec:results-quality}
+
+Table~\ref{tab:quality} and Figure~\ref{fig:quality} report the validation
+layer.
+
+\begin{table*}[t]
+\centering
+\caption{Explanation quality by stage. Thresholds (faithfulness $>0.5$,
+seed Spearman $>0.6$) were fixed before any result was computed. Lipschitz
+columns are the maximum and mean ratio of attribution change to input
+perturbation (25 instances per stage, Gaussian noise, sd 0.05).}
+\label{tab:quality}
+\small
+\begin{tabular}{@{}lccccccc@{}}
+\toprule
+\textbf{Stage} & \textbf{Faithfulness $\rho$} & \textbf{vs 0.5} &
+\textbf{Deletion AUC} & \textbf{Insertion AUC} &
+\textbf{Lipschitz (max / mean)} &
+\textbf{Seed $\rho$ (mean / worst)} & \textbf{vs 0.6} \\
+\midrule
+S1 & $0.571 \pm 0.177$ & \pass & 0.2365 & 0.5039 & 0.048 / 0.015 & 1.000 / 1.000 & \pass \\
+S2 & $0.494 \pm 0.179$ & \fail & 0.1440 & 0.3820 & 0.073 / 0.013 & 0.966 / 0.943 & \pass \\
+S3 & $0.565 \pm 0.169$ & \pass & 0.3495 & 0.5898 & 0.028 / 0.010 & 0.943 / 0.886 & \pass \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{fig4_explanation_quality.pdf}
+\caption{Explanation quality by stage: faithfulness against its
+pre-registered threshold, deletion versus insertion AUC, and cross-seed
+agreement of the importance ordering.}
+\label{fig:quality}
+\end{figure}
+
+Figure~\ref{fig:quality} juxtaposes the three arms, and its most
+informative property is what does \emph{not} vary: the faithfulness panel
+shows all three stages clustered in a narrow band around the threshold
+while the consistency panel shows all three pinned near the ceiling, so the
+quality profile is high-reproducibility, moderate-faithfulness everywhere,
+rather than degrading with depth in the funnel. \emph{Faithfulness} sits
+between 0.494 and 0.571, and S2 misses the pre-registered bar; we report
+this as a failure rather than rounding it up. The magnitudes carry their
+own message: the explanations capture a substantial but not exhaustive
+portion of the models' mechanisms, and should be read as informative
+approximations rather than complete accounts.
+
+\emph{Deletion and insertion} behave as required at every stage: removing
+top positively-attributed features degrades the prediction monotonically,
+and deletion AUC is roughly half insertion AUC. The attributions point at
+features the models genuinely use. These areas are compared within stages
+only, since the three models operate on different populations and score
+distributions.
+
+\emph{Stability passes at every stage.} The local Lipschitz estimate bounds
+attribution change at a maximum ratio of 0.073 (S2), with means near 0.01:
+perturbing the input moves the explanation by a small fraction of the
+perturbation itself. Notably, S2---weakest on faithfulness---is not
+unstable; its explanations are consistent and robust, merely less tethered
+to the model's actual sensitivity than at the other stages.
+
+\emph{Reproducibility passes decisively}, with worst-pair cross-seed
+correlations of 0.886 or higher against a threshold of 0.6. This is what
+licenses Figure~\ref{fig:migration}: the migration trajectory survives
+reseeding. The mild decline toward later stages tracks their smaller
+evaluation populations.
+
+Collectively, the layer supports using the trajectories---while flagging
+S2, which combines the weakest predictive lift, the only faithfulness miss,
+and (below) the weakest per-instance cross-paradigm agreement.
+Consideration is the stage at which this framework's explanations deserve
+the most caution, and the paper says so plainly rather than reporting
+stage-averaged explanation quality.
+
+\subsection{Cross-paradigm agreement (H4)}
+\label{sec:results-h4}
+
+The GRU is competitive with the tree models---test PR-AUC 0.124 against
+0.131 at S1 and 0.565 against 0.568 at S3---so disagreement below is not
+attributable to one incompetent arm.
+
+At the level of \emph{aggregate rankings}, Spearman correlations between
+TimeSHAP and TreeSHAP are $+0.200$ (S1), $+0.500$ (S2) and $+0.600$ (S3)
+against a pre-registered threshold of 0.6. \textbf{H4 is not supported},
+though the test is severely underpowered: the paradigms share only four or
+five mappable concepts, and with four items Spearman takes only a handful of
+discrete values. The pre-registration did not anticipate how few concepts
+the schemas would share, and the rising trend is therefore read
+descriptively.
+
+Per-instance agreement was therefore also computed: for each shared
+concept, tree and sequence attributions were correlated across 350+ shared
+sessions, over five seeds (Table~\ref{tab:h4}).
+
+\begin{table}[t]
+\centering
+\caption{Cross-paradigm agreement: aggregate versus per-instance.}
+\label{tab:h4}
+\small
+\begin{tabular}{@{}lS[table-format=+1.3]S[table-format=+1.3]c@{}}
+\toprule
+\textbf{Stage} & {\textbf{Aggregate $\rho$}} &
+{\textbf{Per-instance mean $\rho$}} & \textbf{Sign-stable concepts} \\
+\midrule
+S1 & +0.200 & +0.179 & 1 of 4 \\
+S2 & +0.500 & -0.018 & 0 of 5 \\
+S3 & +0.600 & +0.046 & 2 of 5 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Per-instance agreement is indistinguishable from zero at every stage, and
+only 3 of 14 (stage, concept) pairs hold a consistent sign across seeds.
+\textbf{Aggregate convergent validity does not imply agreement about
+individual cases}: the same models produce aggregate correlations up to
+$+0.600$ and per-instance agreement of approximately zero. The comparison
+conflates differences in architecture, input representation and explanation
+algorithm, and the observed disagreement is accordingly an upper bound on
+conceptual divergence rather than a pure measure of it; quantifying the
+within-method variability of repeated TimeSHAP runs would sharpen the
+reference point and is left to future work. We note explicitly that a
+single-seed version of this analysis produced an apparent $-0.151$ at S2
+that did \emph{not} survive reseeding (Appendix~A); with seed standard
+deviations of 0.2--0.4 on these correlations, sign stability rather than
+the mean is the reportable quantity.
+
+\subsection{Robustness and sensitivity analyses}
+\label{sec:results-sensitivity}
+
+\paragraph{Sessionisation gap} Halving or doubling the 30-minute threshold
+changes the session count by $\pm 3\%$, stage reach by under one percentage
+point, and stage prevalence by well under half a point
+(Table~\ref{tab:gap})---all far smaller than the between-stage differences
+on which the paper's claims rest.
+
+\begin{table}[t]
+\centering
+\caption{Sessionisation-gap sensitivity (full corpus). Cells are
+reach\,/\,prevalence.}
+\label{tab:gap}
+\small
+\begin{tabular}{@{}lS[table-format=7.0]ccc@{}}
+\toprule
+\textbf{Gap} & {\textbf{Sessions}} & \textbf{S1} & \textbf{S2} & \textbf{S3} \\
+\midrule
+15 min & 5544851 & 0.978 / 0.0864 & 0.471 / 0.0652 & 0.092 / 0.5160 \\
+30 min & 5366181 & 0.979 / 0.0885 & 0.480 / 0.0683 & 0.093 / 0.5210 \\
+60 min & 5219040 & 0.979 / 0.0897 & 0.487 / 0.0705 & 0.093 / 0.5248 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Sample size} Doubling the subsample to 400{,}000 users changes
+PR-AUC by $+0.003$ to $+0.009$ and leaves every conclusion intact: lift
+still falls monotonically (1.84, 1.49, 1.10) and ROC-AUC with it (0.648,
+0.634, 0.570). The sample is nested at a fixed seed, so the differences are
+attributable to the added users rather than to a different draw.
+
+\paragraph{Hyperparameter tuning} Refitting the stage models with the
+Optuna-selected configurations (Section~\ref{sec:methods-tuning}) moves
+PR-AUC by $+0.002$ (S1) and $+0.003$ (S2)---within one to two seed standard
+deviations---and by $+0.032$ at S3 ($0.568 \to 0.600$, roughly eight seed
+standard deviations). The lift ordering is unchanged: 1.81, 1.46, 1.15
+tuned against 1.79, 1.41, 1.09 at defaults, still monotonically falling.
+All three searches selected the minimum tree count in the space with strong
+regularisation---shallow trees at S1 and S3, a slow learning rate at
+S2---consistent with a drift-prone temporal split rewarding conservative
+models; that the largest gain lands at the underpowered S3 fits the same
+reading, and even tuned it remains the weakest stage.
+
+\paragraph{Split protocol} On the grouped split, which is identity-clean
+but not time-ordered, lift falls $1.98 \to 1.53 \to 1.15$. The monotone
+decline on which H1's rejection rests is therefore not an artefact of the
+temporal protocol. Grouped performance sits above temporal at every stage,
+which is what temporal drift predicts: a model tested on its own period's
+peers faces an easier problem than one tested on the future.
+
+\paragraph{Calibration set} Fitting the calibrator on the validation month
+rather than on a slice of the training period raises expected calibration
+error from 0.025 to 0.118. Figure~\ref{fig:reliability} shows why the
+failure is systematic rather than noisy: the validation-calibrated
+reliability curve falls below the identity line in \emph{every} probability
+bin---observed conversion rates are uniformly lower than predicted
+probabilities---which is the signature of a calibrator transported from a
+higher-prevalence population (November, 25.4\%) to a lower-prevalence one
+(December, 12.5\%), while the training-slice calibrator (12.2\%) tracks the
+identity line closely throughout. The figure is thus a compact empirical demonstration of
+prior-probability shift, and the reasons the textbook choice of calibration
+set inverts under drift are developed in
+Section~\ref{sec:discussion-method}.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.85\linewidth]{fig5_reliability.pdf}
+\caption{Reliability under prior-probability shift (Dataset A). Calibrating
+on November (25.4\% prevalence) and evaluating on December (12.5\%)
+over-predicts in every bin; calibrating on a training-period slice (12.2\%)
+restores calibration.}
+\label{fig:reliability}
+\end{figure}
+
+%==============================================================================
+\section{Discussion}
+\label{sec:discussion}
+%==============================================================================
+
+\subsection{Why predictability declines as intent forms}
+\label{sec:discussion-decline}
+
+The clearest result contradicts the pre-registered hypothesis: normalised
+predictive performance falls across the funnel. Because this is a negative
+result against a directional expectation, it deserves a substantive rather
+than merely statistical interpretation. The pattern admits a selection
+reading: each successive stage conditions on an increasingly committed
+population, and conditioning on commitment removes precisely the
+behavioural variance that discriminates purchasers from non-purchasers.
+Early in the journey, broad exploratory signals separate populations that
+differ widely in intent; by the time a cart exists, nearly everyone
+remaining looks intent, and the residual outcome uncertainty is governed by
+factors the clickstream does not observe---price comparison off-site,
+household deliberation, payment friction. On this reading, the framework's
+falsifiable prediction is that covariates capturing off-stream context
+should recover discrimination at S3 where within-stream behaviour cannot;
+testing it requires data this study does not possess and is flagged as
+future work.
+
+The finding inverts a common operational assumption: the stages where
+prediction is conventionally deployed (late, high-intent) are the stages
+where the model adds least ranking skill over the base rate, while the
+stages where intervention is most valuable (early) are where relative skill
+is highest. Prevalence-normalised reporting is what makes this visible;
+absolute PR-AUC alone would have told the opposite, wrong, story.
+Figure~\ref{fig:contributions} traces this logic for all four research
+questions, mapping each from the methodological component that makes it
+answerable, through the empirical finding, to the theoretical claim it
+licenses. The map makes the design-science character of the study explicit:
+each finding is produced by precisely the component---prefix-only features
+with lift as the cross-stage metric, stage-conditioned attribution,
+pre-registered validation with per-instance agreement, the static
+contrast---that conventional pipelines omit, which is the sense in which
+the artifact, and not merely the dataset, generates the knowledge. The
+map's bottom line is also its epistemic posture: three of the four
+pre-registered hypotheses were not supported, and all four are reported as
+found.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{diag6_contributions.pdf}
+\caption{Contribution map. Each research question is traced from the
+methodological innovation that makes it answerable, through the empirical
+finding, to the theoretical contribution it supports. Three of the four
+pre-registered hypotheses were not supported; all four are reported as
+found.}
+\label{fig:contributions}
+\end{figure}
+
+\subsection{Attribution migration and the staged journey}
+\label{sec:discussion-migration}
+
+The migration results give quantitative content to a long-standing
+theoretical claim: journey stages are qualitatively distinct decision
+regimes \citep{bucklin2003model, lemon2016understanding}. The mid-funnel
+peak of navigation entropy is the sharpest illustration---comparison
+behaviour is maximally informative exactly when the staged account says
+customers compare---and it is structurally invisible to whole-session
+attribution, which averages the 3.5/22.4/7.4 trajectory into a flat 11.1\%.
+The coexistence of high attribution share with negligible unique predictive
+contribution (Section~\ref{sec:results-ablation}) is itself informative:
+attribution answers ``what evidence does the model lean on,'' ablation
+answers ``what could not be replaced,'' and conflating the two reads
+redundancy as importance or importance as redundancy. Applied XAI studies
+rarely draw the distinction; the framework operationalises it.
+
+\subsection{Implications for decision support and practice}
+\label{sec:discussion-practice}
+
+Three implications follow for intelligent decision support. First,
+prediction and explanation should share informational constraints by
+architecture, not convention: an explanation layer bolted onto a
+whole-session model can cite behaviour that postdates the decision point,
+and no amount of visualisation repairs that. Second, intervention design
+can key on the stage-conditioned profiles: at exploration, price context
+and browsing breadth dominate, favouring assortment and price-transparency
+interventions; at consideration, navigation and engagement dominate,
+favouring comparison support; at intent, engagement consolidates, and the
+model's residual skill is thin---interventions there are better justified
+by margin arithmetic than by predicted propensity. Third, explanation
+validation belongs in deployment pipelines: the per-stage quality table is
+cheap to compute, and in these data it would have flagged S2 as the stage
+where explanations deserve least trust---something no aggregate metric
+reveals. The per-instance H4 result adds a governance caution: aggregate
+agreement between explanation methods does not license per-customer
+narratives, and systems that surface individual explanations should
+validate at the instance level, not the population level.
+
+\subsection{Methodological implications}
+\label{sec:discussion-method}
+
+Two findings generalise beyond this study. The calibration result is a
+concrete instance of prior-probability shift \citep{saerens2002adjusting}:
+under temporal drift, the validation month is the \emph{worst} place to fit
+a calibrator, because its prevalence differs from both training and test;
+an ECE of 0.118 versus 0.025 is the measured cost of the textbook choice in
+these data. The tuning result carries a related message: under a temporal
+split, hyperparameter search consistently selected the most regularised
+configurations available, and the gain concentrated in the smallest, most
+drift-exposed stage. Both are symptoms of the same underlying regime---
+evaluation under distribution shift---and both argue that protocol details
+conventionally treated as boilerplate (where the calibrator is fitted,
+whether defaults are tuned) interact with drift in ways that are large
+relative to the effects under study.
+
+\subsection{Limitations and threats to validity}
+\label{sec:limitations}
+
+The limitations of this study fall into three groups: what the data cannot
+express, what the design conditions on, and what the evaluation cannot yet
+establish.
+
+The first group concerns measurement. Search-query text is unavailable in
+both datasets, scroll depth is proxied by dwell time, and device and
+traffic-source variables are absent from Dataset~B, which is why H2's
+contextual arm is reported as untestable rather than approximated through
+proxies. Dataset~A, for its part, is non-causal by construction: its
+features are whole-session aggregates and \texttt{PageValues} is measured
+post-transaction, so it functions in this study strictly as a benchmark and
+static comparator, never as an instantiation of the framework.
+
+The second group concerns conditioning and power. The stage models are
+conditional on reaching the stage, so the improvement curve is a
+conditional claim, and Table~\ref{tab:stages} carries the reach rates and
+prevalences without which it cannot be read correctly. The intent stage is
+underpowered---with 2{,}973 test sessions no S3 ablation contrast is
+decidable---and the temporal split, by keeping visitors whole while
+respecting time order, costs 51{,}256 of 200{,}000 users as
+boundary-straddlers, retaining 222{,}268 of 485{,}459 sessions. Both
+limitations share a single remedy, an observation window longer than one
+month, which we regard as the highest-value extension of the present
+design. The recurrent arm is likewise small: the GRU is trained briefly on
+a subsample, its attributions carry seed standard deviations of 0.2--0.4,
+and one single-seed conclusion drawn from it had to be withdrawn
+(Appendix~A)---an episode that motivates the sign-stability reporting
+standard adopted in Section~\ref{sec:results-h4}.
+
+The third group concerns the boundaries of the evaluation itself. The
+validation partition is used twice: hyperparameter tuning selects among
+models on validation PR-AUC, and the operating threshold is subsequently
+chosen on the same partition. The interaction is weak, since tuning
+optimises a threshold-free metric and thresholding is a downstream choice
+on the already-selected model, but it is a double use, and a stricter
+design would reserve a separate partition for each. More fundamentally, the
+framework is predictive, not causal: SHAP quantifies contribution to model
+predictions, not causal influence on purchasing, so the trajectories
+describe how predictive evidence evolves, not how motives do. Finally,
+external validity is bounded by the empirical setting---one retailer, one
+market, one month, offline evaluation. The framework is portable; these
+specific attribution trajectories are not claimed to be, and live
+validation of stage-conditioned interventions remains future work.
+
+\subsection{Future work}
+\label{sec:future}
+
+Beyond the extensions above: multi-month windows to relieve S3's power
+limitation and reduce boundary attrition; off-stream covariates to test the
+falsifiable prediction of Section~\ref{sec:discussion-decline}; finer stage
+lattices approaching per-event explanation trajectories; within-method
+variability baselines for cross-paradigm comparison; and deployment studies
+measuring whether stage-conditioned explanations change intervention
+decisions.
+
+%==============================================================================
+\section{Conclusion}
+\label{sec:conclusion}
+%==============================================================================
+
+This study asked what happens when explanation is held to the same temporal
+standard as prediction. The answer, on 42.4 million events, is that most of
+what a whole-session attribution reports is either unavailable at decision
+time or an average over regimes the journey keeps distinct. Funnel-Stage
+SHAP enforces the prefix constraint at the representation level, conditions
+both model and explanation on the funnel stage, and validates the resulting
+explanations for faithfulness, stability and reproducibility. Applied
+end-to-end, the framework reversed one pre-registered expectation
+(prevalence-normalised predictability declines as intent forms), quantified
+a second (attribution mass migrates, with navigation behaviour peaking
+mid-funnel), and split a third (explanation paradigms agree in aggregate
+and disagree per instance). Each finding is invisible to the standard
+pipeline: the first without prevalence normalisation, the second without
+stage conditioning, the third without instance-level validation.
+
+The broader argument is that explanation quality tracks predictive signal
+and should be validated where decisions are made---per stage, and where
+individual customers are concerned, per instance. As machine learning
+systems increasingly operate on evolving behavioural streams, temporal
+fidelity is not an optional refinement of explainable AI but a precondition
+for explanations that support, rather than merely decorate, operational
+decisions.
+
+%==============================================================================
+\section*{CRediT authorship contribution statement}
+%==============================================================================
+% NOTE TO AUTHORS: adjust before submission.
+\textbf{Ayoub Agnaou:} Conceptualisation, Methodology, Software, Formal
+analysis, Investigation, Data curation, Writing -- original draft,
+Visualisation. \textbf{S.~Ailli:} Supervision, Validation, Writing --
+review \& editing.
+
+\section*{Declaration of competing interest}
+The authors declare that they have no known competing financial interests
+or personal relationships that could have appeared to influence the work
+reported in this paper.
+
+\section*{Data availability}
+Dataset~A is publicly available from the UCI Machine Learning Repository.
+Dataset~B (REES46 multi-category store, October 2019) is publicly
+distributed; provenance hashes, the frozen splits, the seed list, all
+result tables and the full analysis code accompany this manuscript.
+
+\section*{Declaration of generative AI in the writing process}
+% NOTE TO AUTHORS: complete per journal policy before submission.
+[To be completed in accordance with the journal's generative-AI policy.]
+
+%==============================================================================
+\appendix
+\section{Pre-registered protocol and amendment log}
+\label{app:amendments}
+%==============================================================================
+
+The pre-registered protocol (v1.0) and the complete dated amendment log (26
+entries) accompany this manuscript. Amendments record every deviation from
+the frozen protocol with its date, rationale and affected sections,
+including three cut-point redefinitions made on the basis of measurement
+(Section~\ref{sec:methods-journey}), one reversal of a reported hypothesis
+verdict after proper confidence intervals replaced an invalid comparison of
+means to seed standard deviations, one withdrawal of a single-seed result
+that did not survive reseeding (Section~\ref{sec:results-h4}), and the
+post-hoc execution of the tuning, grouped-split and stability arms with
+default-hyperparameter results retained as headline
+(Section~\ref{sec:results-sensitivity}).
+
+%==============================================================================
+
+\bibliographystyle{elsarticle-harv}
+\bibliography{references}
+
+\end{document}
