@@ -78,8 +78,16 @@ def run_stage_models(
     keep_fitted: bool = False,
     calibrate: str = "isotonic",
     calibration_fraction: float = 0.20,
+    params_by_stage: dict[StageName, dict] | None = None,
 ) -> list[StageRun]:
-    """Fit and evaluate a model per (stage, model, seed, feature set)."""
+    """Fit and evaluate a model per (stage, model, seed, feature set).
+
+    `params_by_stage` carries tuned hyperparameters (Sec. 9.5) into the
+    estimator; it only makes sense with a single model type, since the params
+    were searched for that model.
+    """
+    if params_by_stage and len(models) != 1:
+        raise ValueError("params_by_stage requires exactly one model type")
     split = load_split(suffix, protocol)
     ladder = ALL_FEATURE_SETS
     unknown = set(feature_sets) - set(ladder)
@@ -125,7 +133,8 @@ def run_stage_models(
                     set_global_seed(seed)
 
                     pipeline = build_pipeline(
-                        model_type, columns, [], seed=seed, imbalance=imbalance
+                        model_type, columns, [], seed=seed, imbalance=imbalance,
+                        params=(params_by_stage or {}).get(stage),
                     )
                     pipeline.fit(X.iloc[fit_rows], y[fit_rows])
 

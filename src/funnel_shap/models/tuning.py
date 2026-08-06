@@ -147,6 +147,30 @@ def tune_model(
     )
     study.optimize(objective, n_trials=n_trials, timeout=timeout, show_progress_bar=False)
 
+    return _result_from_study(study, model_type=model_type, stage=stage, seed=seed)
+
+
+def load_tuned_params(
+    model_type: str,
+    stage: str,
+    *,
+    seed: int = 42,
+    storage_dir: Path = OPTUNA,
+) -> dict[str, Any]:
+    """Reopen a persisted study and return its best parameters (Sec. 9.5)."""
+    import optuna
+
+    study_name = f"{stage}_{model_type}_seed{seed}"
+    path = storage_dir / f"{study_name}.db"
+    if not path.exists():
+        raise FileNotFoundError(f"no completed study at {path}; run tuning first")
+    study = optuna.load_study(
+        study_name=study_name, storage=f"sqlite:///{path.as_posix()}"
+    )
+    return dict(study.best_params)
+
+
+def _result_from_study(study, *, model_type: str, stage: str, seed: int) -> TuningResult:
     states = [t.state.name for t in study.trials]
     return TuningResult(
         model=model_type,
@@ -157,5 +181,5 @@ def tune_model(
         n_completed=states.count("COMPLETE"),
         n_pruned=states.count("PRUNED"),
         seed=seed,
-        study_name=study_name,
+        study_name=study.study_name,
     )

@@ -117,3 +117,22 @@ def test_logreg_space_is_small_but_present(data, tmp_path) -> None:
         columns=cols, n_trials=4, seed=7, storage_dir=tmp_path,
     )
     assert "C" in result.best_params
+
+
+def test_load_tuned_params_roundtrips_the_persisted_study(data, tmp_path) -> None:
+    from funnel_shap.models.tuning import load_tuned_params
+
+    X_tr, y_tr, X_va, y_va, cols = data
+    result = tune_model(
+        "lightgbm", X_tr, y_tr, X_va, y_va,
+        columns=cols, n_trials=4, seed=7, stage="S1", storage_dir=tmp_path,
+    )
+    params = load_tuned_params("lightgbm", "S1", seed=7, storage_dir=tmp_path)
+    assert params == result.best_params
+
+
+def test_load_tuned_params_fails_loudly_without_a_study(tmp_path) -> None:
+    from funnel_shap.models.tuning import load_tuned_params
+
+    with pytest.raises(FileNotFoundError, match="run tuning first"):
+        load_tuned_params("lightgbm", "S1", seed=7, storage_dir=tmp_path)

@@ -261,12 +261,87 @@ def baselines_a(
 
 
 @app.command()
+def tune(
+    suffix: str = _SUFFIX_OPT,
+    protocol: str = "temporal",
+    models: str = typer.Option("lightgbm", help="Comma-separated model types"),
+    n_trials: int = typer.Option(100, help="Trials per (stage, model) study"),
+    seed: int = 42,
+) -> None:
+    """Optuna tuning per stage on the frozen validation split (Sec. 9.5)."""
+    paths.ensure_dirs()
+
+    import json
+
+    from .data.journey import MODELLING_STAGES
+    from .data.splits import load_split
+    from .features.dictionary import ALL_FEATURE_SETS, FEATURE_DICTIONARY, feature_names
+    from .models.run_stages import _split_features
+    from .models.tuning import tune_model
+
+    split = load_split(suffix, protocol)
+    chosen_models = tuple(m.strip() for m in models.split(",") if m.strip())
+    groups = set(ALL_FEATURE_SETS["full"])
+
+    rows = []
+    for stage in MODELLING_STAGES:
+        path = paths.PROCESSED / f"features_{suffix}_{stage}.parquet"
+        if not path.exists():
+            continue
+        joined, y, partition = _split_features(pl.read_parquet(path), split)
+        train = partition == "train"
+        val = partition == "val"
+        if not val.any() or y[val].sum() == 0:
+            typer.echo(f"{stage}: no evaluable validation partition, skipped")
+            continue
+
+        available = feature_names(stage)
+        columns = [
+            spec.name
+            for spec in FEATURE_DICTIONARY
+            if spec.name in available and spec.ablation_group in groups
+        ]
+        X = joined.select(columns).to_pandas()
+
+        for model_type in chosen_models:
+            typer.echo(f"tuning {stage}/{model_type} ({n_trials} trials) ...")
+            result = tune_model(
+                model_type,
+                X[train], y[train], X[val], y[val],
+                columns=columns, stage=stage, n_trials=n_trials, seed=seed,
+            )
+            typer.echo("  " + result.summary())
+            rows.append(
+                {
+                    "stage": stage,
+                    "model": model_type,
+                    "seed": seed,
+                    "protocol": protocol,
+                    "n_trials": result.n_trials,
+                    "n_completed": result.n_completed,
+                    "n_pruned": result.n_pruned,
+                    "best_val_pr_auc": result.best_value,
+                    "best_params": json.dumps(result.best_params, sort_keys=True),
+                }
+            )
+
+    if not rows:
+        raise typer.BadParameter(f"no stage could be tuned for suffix {suffix!r}")
+    out = paths.TABLES / f"tuning_{suffix}.csv"
+    pl.DataFrame(rows).write_csv(out)
+    typer.echo(f"\n-> {out}")
+
+
+@app.command()
 def stage_models(
     suffix: str = _SUFFIX_OPT,
     protocol: str = "temporal",
     models: str = typer.Option("lightgbm", help="Comma-separated model types"),
     seeds: str = typer.Option("", help="Comma-separated subset of the frozen seed list"),
     ablation: bool = typer.Option(False, help="Run the full ablation ladder (Sec. 10, H3)"),
+    tuned: bool = typer.Option(
+        False, help="Use Optuna best params from experiments/optuna/ (Sec. 9.5)"
+    ),
 ) -> None:
     """Fit the Dataset B stage models (run-sheet step 8, Sec. 9.2)."""
     paths.ensure_dirs()
@@ -299,6 +374,20 @@ def stage_models(
     if not features:
         raise typer.BadParameter(f"no feature matrices for suffix {suffix!r}")
 
+    params_by_stage = None
+    if tuned:
+        from .models.tuning import load_tuned_params
+
+        if len(chosen_models) != 1:
+            raise typer.BadParameter("--tuned requires exactly one model type")
+        params_by_stage = {}
+        for stage in features:
+            try:
+                params_by_stage[stage] = load_tuned_params(chosen_models[0], stage)
+            except FileNotFoundError:
+                typer.secho(f"{stage}: no study found, using defaults", fg=typer.colors.YELLOW)
+        typer.echo(f"tuned params loaded for: {sorted(params_by_stage)}")
+
     runs = run_stage_models(
         features,
         suffix=suffix,
@@ -306,13 +395,19 @@ def stage_models(
         models=chosen_models,
         seeds=chosen_seeds,
         feature_sets=feature_sets,
+        params_by_stage=params_by_stage,
     )
     if not runs:
         raise typer.BadParameter("no stage produced an evaluable model")
 
-    stage_results_table(runs).write_csv(paths.TABLES / f"stage_models_{suffix}_per_seed.csv")
+    # The headline temporal-default tables keep their historical names; any
+    # other configuration must not overwrite them.
+    tag = suffix if protocol == "temporal" else f"{suffix}_{protocol}"
+    if tuned:
+        tag = f"{tag}_tuned"
+    stage_results_table(runs).write_csv(paths.TABLES / f"stage_models_{tag}_per_seed.csv")
     curve = improvement_curve(runs)
-    curve.write_csv(paths.TABLES / f"improvement_curve_{suffix}.csv")
+    curve.write_csv(paths.TABLES / f"improvement_curve_{tag}.csv")
 
     typer.echo("")
     typer.echo(curve)
@@ -324,7 +419,7 @@ def stage_models(
 
     if ablation:
         table = ablation_table(runs)
-        table.write_csv(paths.TABLES / f"ablation_{suffix}.csv")
+        table.write_csv(paths.TABLES / f"ablation_{tag}.csv")
         typer.echo("")
         typer.echo(table)
 
@@ -332,7 +427,7 @@ def stage_models(
         from .evaluate.stage_tests import run_stage_comparisons, summarise
 
         comparisons = run_stage_comparisons(runs)
-        comparisons.write_csv(paths.TABLES / f"comparisons_{suffix}.csv")
+        comparisons.write_csv(paths.TABLES / f"comparisons_{tag}.csv")
         typer.echo("")
         typer.echo(summarise(comparisons))
 

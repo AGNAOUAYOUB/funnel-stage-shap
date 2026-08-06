@@ -124,3 +124,25 @@ def test_scores_are_probabilities(stage_setup) -> None:
     for run in _run(features, directory, seeds=(7,)):
         assert np.all((run.test_scores >= 0) & (run.test_scores <= 1))
         assert len(run.test_scores) == len(run.y_test)
+
+
+def test_params_by_stage_requires_a_single_model(stage_setup) -> None:
+    """Tuned params were searched for one model; applying them to another is a bug."""
+    features, directory = stage_setup
+    with pytest.raises(ValueError, match="exactly one model"):
+        _run(
+            features, directory, seeds=(7,),
+            models=("lightgbm", "logreg"),
+            params_by_stage={"S1": {"n_estimators": 50}},
+        )
+
+
+def test_params_by_stage_reaches_the_estimator(stage_setup) -> None:
+    features, directory = stage_setup
+    params = {stage: {"n_estimators": 17} for stage in MODELLING_STAGES}
+    runs = _run(features, directory, seeds=(7,), params_by_stage=params, keep_fitted=True)
+
+    assert runs
+    for run in runs:
+        estimator = run.fitted.named_steps["model"]
+        assert estimator.get_params()["n_estimators"] == 17
