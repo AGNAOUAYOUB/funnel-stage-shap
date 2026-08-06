@@ -633,6 +633,23 @@ prevalence-independent, falls with it.}
 \label{fig:curve}
 \end{figure}
 
+Figure~\ref{fig:stageperf} decomposes the same result into its three components.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.96\linewidth]{fig7_stage_performance.pdf}
+\caption{Stage-wise predictive performance. (a) PR-AUC tracks its own chance
+level (the prevalence) closely, so the apparent rise is largely a base-rate
+effect; the annotated lift is the ratio of the two. (b) ROC-AUC is
+prevalence-free and declines monotonically. (c) Calibration error after
+isotonic calibration on a training-period slice. Brier scores are reported as
+text rather than plotted beside ECE: Brier combines calibration with refinement
+and its scale tracks the base rate, so S3's 0.246 mostly reflects a 52\%
+prevalence (reference $p(1-p)=0.250$) rather than poor calibration. Error bars
+are paired bootstrap 95\% intervals.}
+\label{fig:stageperf}
+\end{figure*}
+
 \textbf{H1 is not supported; the direction of the effect is reversed.} H1 predicted
 that PR-AUC would rise monotonically from awareness to intent. Raw PR-AUC does
 rise, from 0.131 to 0.568---but chance-level PR-AUC rises with it, from 0.073 to
@@ -719,6 +736,22 @@ Weekend                     & 0.010 & 0.011 & 0.020 & +0.009 \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+Figure~\ref{fig:alluvial} presents the same quantity as flow rather than as
+lines, which makes the redistribution of attribution mass easier to read at a
+glance: shares sum to one at each stage, so the stacked column height is constant
+and a ribbon's changing thickness is exactly a driver's gain or loss.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.92\linewidth]{fig8_migration_alluvial.pdf}
+\caption{Alluvial view of attribution migration. Ordering within each column is
+held fixed across stages: sorting each column independently would make ribbons
+cross for cosmetic reasons and imply transfer between drivers. Attribution mass
+is not transferred from one feature to another---it is recomputed at each
+stage---so the ribbons express redistribution of a fixed total, not flow.}
+\label{fig:alluvial}
+\end{figure*}
 
 Both stage pairs are fully distinct---no session shares a cut-point between S1 and
 S2 or between S2 and S3 (mean gaps 2.49 and 5.37 events)---so the trajectories

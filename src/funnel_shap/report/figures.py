@@ -282,3 +282,207 @@ def build_all(suffix: str, *, directory: Path = FIGURES) -> dict[str, list[Path]
         if path.exists():
             built[name] = fn(path, directory=directory)
     return built
+
+
+# ---------------------------------------------------------------------------
+# Figure 7 — stage-wise predictive performance
+# ---------------------------------------------------------------------------
+
+
+def figure_7_stage_performance(
+    per_seed_csv: Path, *, directory: Path = FIGURES
+) -> list[Path]:
+    """PR-AUC, ROC-AUC and calibration across S1 -> S2 -> S3.
+
+    Three panels because the three quantities behave differently and collapsing
+    them onto one axis would hide that. PR-AUC is drawn against its own chance
+    level, since chance-level PR-AUC *is* the prevalence and that rises sixfold
+    across the stages; ROC-AUC is prevalence-independent and needs no such
+    reference; calibration is on a different scale entirely and is shown as
+    error, where lower is better.
+    """
+    table = pl.read_csv(per_seed_csv).filter(pl.col("feature_set") == "full")
+    agg = (
+        table.group_by("stage")
+        .agg(
+            pl.col("prevalence").first().alias("prevalence"),
+            pl.col("pr_auc").mean().alias("pr_auc"),
+            pl.col("pr_auc_ci_low").mean().alias("pr_lo"),
+            pl.col("pr_auc_ci_high").mean().alias("pr_hi"),
+            pl.col("pr_auc_lift").mean().alias("lift"),
+            pl.col("roc_auc").mean().alias("roc_auc"),
+            pl.col("roc_auc_ci_low").mean().alias("roc_lo"),
+            pl.col("roc_auc_ci_high").mean().alias("roc_hi"),
+            pl.col("ece").mean().alias("ece"),
+            pl.col("brier").mean().alias("brier"),
+        )
+        .sort("stage")
+    )
+
+    stages = agg["stage"].to_list()
+    x = np.arange(len(stages))
+    fig, axes = plt.subplots(1, 3, figsize=(7.8, 3.0))
+
+    ax = axes[0]
+    ax.errorbar(
+        x, agg["pr_auc"],
+        yerr=[agg["pr_auc"] - agg["pr_lo"], agg["pr_hi"] - agg["pr_auc"]],
+        marker="o", color=PALETTE[0], capsize=3, lw=1.6, label="PR-AUC",
+    )
+    ax.plot(x, agg["prevalence"], marker="s", ls="--", color=PALETTE[6],
+            lw=1.2, label="chance (prevalence)")
+    for xi, pr, lift in zip(x, agg["pr_auc"], agg["lift"], strict=True):
+        ax.annotate(f"lift {lift:.2f}", (xi, pr), textcoords="offset points",
+                    xytext=(4, 12), ha="left", fontsize=6.8, color=PALETTE[0])
+    ax.set_xticks(x, stages)
+    ax.set_xlim(-0.45, len(stages) - 0.35)
+    ax.set_ylim(0, 0.78)
+    ax.set_ylabel("PR-AUC")
+    ax.set_title("(a) PR-AUC vs chance", fontsize=9)
+    ax.legend(fontsize=6.4, frameon=False, loc="upper left")
+
+    ax = axes[1]
+    ax.errorbar(
+        x, agg["roc_auc"],
+        yerr=[agg["roc_auc"] - agg["roc_lo"], agg["roc_hi"] - agg["roc_auc"]],
+        marker="^", color=PALETTE[2], capsize=3, lw=1.6,
+    )
+    ax.axhline(0.5, color="grey", lw=0.9, ls=":")
+    ax.text(len(stages) - 1, 0.503, "chance", fontsize=6.4, color="grey",
+            ha="right", va="bottom")
+    ax.set_xticks(x, stages)
+    ax.set_ylim(0.48, 0.70)
+    ax.set_ylabel("ROC-AUC")
+    ax.set_title("(b) ROC-AUC (prevalence-free)", fontsize=9)
+
+    # Panel (c): ECE only as bars. Brier is deliberately NOT plotted beside it:
+    # it is a proper scoring rule combining calibration with refinement, and its
+    # scale tracks the base rate (the reference Brier for a prevalence-only
+    # forecast is p(1-p), which is 0.068 at S1 but 0.250 at S3). Drawn on a
+    # shared axis, S3's Brier towers over the others for reasons that have
+    # nothing to do with calibration quality. It is reported as text instead.
+    ax = axes[2]
+    ax.bar(x, agg["ece"], 0.5, color=PALETTE[1])
+    for xi, e, b, p in zip(x, agg["ece"], agg["brier"], agg["prevalence"], strict=True):
+        ax.annotate(f"{e:.3f}", (xi, e), textcoords="offset points",
+                    xytext=(0, 3), ha="center", fontsize=7, color=PALETTE[1],
+                    weight="bold")
+        ax.annotate(f"Brier {b:.3f}\n(ref {p * (1 - p):.3f})", (xi, 0),
+                    textcoords="offset points", xytext=(0, -26), ha="center",
+                    fontsize=5.9, color="grey", annotation_clip=False,
+                    linespacing=1.3)
+    ax.set_xticks(x, stages)
+    ax.set_ylim(0, max(agg["ece"]) * 1.45)
+    ax.set_ylabel("Expected Calibration Error")
+    ax.set_title("(c) Calibration (lower is better)", fontsize=9)
+
+    # Panel (c) carries the Brier annotations below its axis, so it omits the
+    # axis label rather than colliding with it; the tick labels already name the
+    # stages and the other two panels supply the caption for the row.
+    for ax in axes[:2]:
+        ax.set_xlabel("funnel stage")
+
+    fig.suptitle("Stage-wise predictive performance", fontsize=10.5, y=1.06)
+    fig.tight_layout()
+    return _save(fig, "fig7_stage_performance", directory)
+
+
+# ---------------------------------------------------------------------------
+# Figure 8 — alluvial view of attribution migration
+# ---------------------------------------------------------------------------
+
+
+def figure_8_migration_alluvial(
+    migration_csv: Path, *, directory: Path = FIGURES
+) -> list[Path]:
+    """Alluvial (Sankey-style) view of how attribution mass shifts across stages.
+
+    The same quantity as the trajectory figure, shown as flow rather than as
+    lines. Shares sum to one at each stage, so the stacked column height is
+    constant and a ribbon's changing thickness reads directly as a driver
+    gaining or losing attribution mass.
+
+    Ordering within each column is held fixed across stages. Sorting each column
+    independently would make ribbons cross for cosmetic reasons and imply
+    movement between drivers that does not exist -- attribution mass is not
+    transferred from one feature to another, it is recomputed at each stage.
+    """
+    import matplotlib.patches as mpatches
+
+    table = pl.read_csv(migration_csv).filter(pl.col("available"))
+    stage_order = [s for s in ("S1", "S2", "S3") if s in set(table["stage"])]
+
+    groups = (
+        table.group_by("group").agg(pl.col("share").max().alias("peak"))
+        .sort("peak", descending=True)["group"].to_list()
+    )
+
+    shares = {
+        stage: {
+            r["group"]: (r["share"] or 0.0)
+            for r in table.filter(pl.col("stage") == stage).to_dicts()
+        }
+        for stage in stage_order
+    }
+
+    fig, ax = plt.subplots(figsize=(8.4, 4.6))
+    # Generous side margins: the in-bar value labels are wider than the bars
+    # themselves and ran off the canvas at tighter limits.
+    ax.set_xlim(-0.34, len(stage_order) - 1 + 1.02)
+    ax.set_ylim(-0.09, 1.05)
+    ax.axis("off")
+
+    bar_w = 0.10
+    spans_by_stage: dict[str, list[tuple[float, float]]] = {}
+    for si, stage in enumerate(stage_order):
+        y = 0.0
+        spans = []
+        for gi, group in enumerate(groups):
+            h = shares[stage].get(group, 0.0)
+            spans.append((y, y + h))
+            if h > 0:
+                ax.add_patch(
+                    mpatches.Rectangle(
+                        (si - bar_w / 2, y), bar_w, h,
+                        facecolor=PALETTE[gi % len(PALETTE)], edgecolor="white",
+                        linewidth=0.7, zorder=3,
+                    )
+                )
+                if h > 0.06:
+                    ax.text(si, y + h / 2, f"{h:.2f}", ha="center", va="center",
+                            fontsize=6.4, color="white", weight="bold", zorder=4)
+            y += h
+        spans_by_stage[stage] = spans
+        ax.text(si, -0.045, stage, ha="center", va="top", fontsize=10.5, weight="bold")
+
+    for si in range(len(stage_order) - 1):
+        left, right = stage_order[si], stage_order[si + 1]
+        for gi in range(len(groups)):
+            l0, l1 = spans_by_stage[left][gi]
+            r0, r1 = spans_by_stage[right][gi]
+            if (l1 - l0) <= 0 and (r1 - r0) <= 0:
+                continue
+            x0, x1 = si + bar_w / 2, si + 1 - bar_w / 2
+            t = np.linspace(0, 1, 120)
+            smooth = 3 * t**2 - 2 * t**3
+            xs = x0 + (x1 - x0) * t
+            lower = l0 + (r0 - l0) * smooth
+            upper = l1 + (r1 - l1) * smooth
+            ax.fill_between(xs, lower, upper, color=PALETTE[gi % len(PALETTE)],
+                            alpha=0.32, linewidth=0, zorder=1)
+
+    last = stage_order[-1]
+    for gi, group in enumerate(groups):
+        r0, r1 = spans_by_stage[last][gi]
+        if (r1 - r0) <= 0.015:
+            continue
+        ax.text(len(stage_order) - 1 + bar_w, (r0 + r1) / 2,
+                "  " + pretty_group(group), va="center", ha="left", fontsize=7.4,
+                color=PALETTE[gi % len(PALETTE)])
+
+    ax.set_title(
+        "Attribution migration across funnel stages\n"
+        "(ribbon thickness = share of total mean |SHAP| at that stage)",
+        fontsize=10, pad=10, linespacing=1.4,
+    )
+    return _save(fig, "fig8_migration_alluvial", directory)
