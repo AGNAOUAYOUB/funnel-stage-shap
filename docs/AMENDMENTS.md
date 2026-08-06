@@ -845,6 +845,14 @@ audit trail is support for them. Eleven tests cover the contract, including that
 simulated backend failure does not propagate.
 
 **Honest scope.** Results produced before 2026-08-06 predate the logging and are not
-in the store. The headline stage-model run was re-executed under tracking, both to
-populate the store with a genuine run and as a reproducibility check against the
-existing tables.
+in the store. The headline stage-model run (`stage-models --suffix gap30s200000
+--ablation`, five seeds, full ablation ladder) was re-executed under tracking, both to
+populate the store with a genuine run and as a reproducibility check.
+
+**Reproducibility result.** The regenerated tables are **byte-identical** to the ones
+the manuscript cites: `stage_models_gap30s200000_per_seed.csv` (75 rows x 23 columns,
+including bootstrap confidence intervals) and `improvement_curve_gap30s200000.csv`
+match exactly, with no floating-point drift in any column. The seeded pipeline is
+therefore deterministic on this machine, and the reported numbers survive
+regeneration from the frozen splits. The run is logged with 426 metrics, four output
+tables and its git commit.

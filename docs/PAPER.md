@@ -113,7 +113,7 @@ parts:
 
 The study is pre-registered. Every analytic decision was fixed before the test partition was
 opened, and each subsequent deviation is recorded with a date and rationale in a public
-amendment log (Appendix A). Twenty-six amendments were logged, several of which reverse an
+amendment log (Appendix A). Twenty-nine amendments were logged, several of which reverse an
 initial decision on the basis of measurement; we regard this record as part of the
 contribution rather than an embarrassment to be hidden.
 
@@ -777,7 +777,7 @@ at cohort level.
 
 ## Appendices
 
-- **Appendix A** — Pre-registered protocol (v1.0) and the dated amendment log (26 entries).
+- **Appendix A** — Pre-registered protocol (v1.0) and the dated amendment log (29 entries).
 - **Appendix B** — Full feature dictionary.
 - **Appendix C** — Sessionisation gap and sample-size sensitivity analyses.
 - **Appendix D** — Hyperparameter search spaces and selected values.
