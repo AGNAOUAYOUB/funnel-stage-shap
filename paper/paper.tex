@@ -142,12 +142,35 @@ It is framework-level and domain-level, and consists of three parts:
         rankings and, critically, at the level of individual journeys.
 \end{enumerate}
 
+Figure~\ref{fig:gap} positions the work against the three literatures it draws on,
+and Figure~\ref{fig:contributions} maps each research question to its
+methodological innovation, empirical finding and theoretical contribution.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.86\linewidth]{diag2_gap.pdf}
+\caption{Research gap and positioning. Consumer journey modelling supplies the
+staged view of the visit; Shapley attribution supplies the estimator; explanation
+quality evaluation supplies the validation apparatus. The contribution lies at
+their intersection, which is presently sparse in the applied literature.}
+\label{fig:gap}
+\end{figure}
+
 The study is pre-registered. Every analytic decision was fixed before the test
 partition was opened, and each subsequent deviation is recorded with a date and
 rationale in a public amendment log (Appendix~A). Twenty-three amendments were
 logged, several of which reverse an initial decision on the basis of measurement;
 we regard this record as part of the contribution rather than an embarrassment to
 be hidden.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.94\linewidth]{diag6_contributions.pdf}
+\caption{Contribution map. Each research question is traced through its
+methodological innovation, the empirical finding it produced, and the theoretical
+claim that follows. Three of four pre-registered hypotheses were not supported.}
+\label{fig:contributions}
+\end{figure*}
 
 %==============================================================================
 \section{Related work}
@@ -248,6 +271,28 @@ The study follows a design-science frame \citep{hevner2004design}: the artefact 
 the funnel-stage SHAP framework, and each (model $\times$ stage $\times$
 explanation) combination constitutes a build--evaluate cycle assessed on
 predictive utility, explanation quality and statistical rigour.
+Figure~\ref{fig:dsr} maps the artefact, its evaluation and the resulting knowledge
+contribution onto that frame; Figure~\ref{fig:architecture} gives the
+corresponding computational pipeline.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.92\linewidth]{diag4_dsr.pdf}
+\caption{Design science build--evaluate cycle. The relevance cycle draws the
+business need from the environment; the rigour cycle draws methods from the
+knowledge base; the internal cycle iterates between building the artefact and
+evaluating it. The 23 logged amendments are the visible trace of that iteration.}
+\label{fig:dsr}
+\end{figure*}
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.94\linewidth]{diag1_architecture.pdf}
+\caption{End-to-end pipeline, from raw clickstream to validated
+stage-conditioned explanations. Layers~1 and~2 are parallel attribution sources
+over the same prefixes; Layer~3 validates both.}
+\label{fig:architecture}
+\end{figure*}
 
 The analysis is pre-registered. All analytic decisions---stage definitions,
 feature families, model families, metrics, statistical tests and pass
@@ -366,7 +411,20 @@ that was corrected.
         matrix can exist without leakage.
 \end{itemize}
 
-Table~\ref{tab:stages} reports the resulting stage populations.
+Figure~\ref{fig:prefix} works the protocol through a single session, with
+categories shown so that each cut-point can be verified against the stated rule
+rather than taken on trust. Table~\ref{tab:stages} reports the resulting stage
+populations.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.96\linewidth]{diag3_prefix.pdf}
+\caption{Anti-leakage prefix protocol on a worked session. Browsing signals are
+marked so the S2 cut-point (the \emph{second} such signal) is auditable: $e_2$ is
+a category switch, $e_3$ is both a repeat view and a switch. Prefixes nest and
+are clipped strictly before the purchase.}
+\label{fig:prefix}
+\end{figure*}
 
 \begin{table}[t]
 \centering
@@ -452,7 +510,18 @@ is that removing features which push the prediction up causes it to fall. Stabil
 is a local-Lipschitz estimate \citep{alvarezmelis2018robustness}. Consistency is
 Spearman rank correlation of importance orderings across the five seeds and between
 the two paradigms. Pass thresholds were fixed in advance: faithfulness correlation
-$>0.5$, cross-paradigm Spearman $>0.6$.
+$>0.5$, cross-paradigm Spearman $>0.6$. Figure~\ref{fig:validation} summarises the
+workflow together with the verdicts it produced.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.94\linewidth]{diag5_validation.pdf}
+\caption{Explanation validation workflow. Four tests operate on the tabular
+attributions; cross-paradigm agreement requires both sources. Thresholds were
+fixed before any result was computed, and each verdict is reported against the
+stated bar rather than rounded toward it.}
+\label{fig:validation}
+\end{figure*}
 
 \subsection{Modelling and evaluation}
 \label{sec:eval}
