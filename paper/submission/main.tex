@@ -26,12 +26,13 @@
 \usepackage{array}
 \usepackage{caption}
 \usepackage{xcolor}
+\usepackage[section]{placeins}
 \usepackage[hidelinks]{hyperref}
 
 \graphicspath{{figures/}}
 \sisetup{detect-weight=true, detect-family=true}
 
-% Compact helper for a "pass"/"fail" cell against a pre-registered threshold.
+% Compact helper for a "pass"/"fail" cell against a pre-specified threshold.
 \newcommand{\pass}{\textbf{pass}}
 \newcommand{\fail}{\textit{fail}}
 
@@ -44,16 +45,14 @@
 \title{Funnel-Stage SHAP: a design science framework for stage-conditioned
        explainable purchase prediction in e-commerce}
 
-% NOTE TO AUTHORS: complete the affiliation fields and the second author's
-% given name before submission; placeholders are intentional.
 \author[a]{Ayoub Agnaou\corref{cor1}}
 \ead{ay.agnaou@edu.umi.ac.ma}
 \author[a]{S.~Ailli}
 \cortext[cor1]{Corresponding author.}
-\affiliation[a]{organization={[Institution]},
-                addressline={[Address]},
-                city={[City]},
-                country={[Country]}}
+\affiliation[a]{organization={Faculty of Sciences, Moulay Isma\"il University},
+                addressline={B.P. 11201 Zitoune},
+                city={Meknes},
+                country={Morocco}}
 
 \begin{abstract}
 Purchase prediction from clickstream data is well established, but the
@@ -69,19 +68,23 @@ same prefix, and a dedicated validation layer tests whether the resulting
 explanations are faithful, stable under perturbation and reproducible across
 seeds. Following a design science methodology, the framework is instantiated
 on a session-level benchmark (12,330 sessions) and on an event-level
-clickstream of 42.4 million events yielding 485,459 reconstructed sessions.
-Three findings run against expectation. First, once normalised by its own
-chance level, predictive performance \emph{declines} across the funnel
-(PR-AUC lift 1.79 to 1.09; ROC-AUC 0.641 to 0.569): conversion becomes
-harder, not easier, to predict as intent forms. Second, attribution is
-strongly non-monotone; navigation entropy carries 3.5\% of attribution mass
-at exploration, 22.4\% at consideration and 7.4\% at purchase intent, a
-trajectory that any whole-session analysis averages into a single
+clickstream of 42.4 million events, sessionised into 5.37 million sessions and
+subsampled to an analytical cohort of 485,459. Three findings run against
+expectation. First, the pre-specified hypothesis that predictive performance
+improves along the funnel is not supported under the primary metric: PR-AUC is
+non-monotone ($0.131 \to 0.083 \to 0.568$) because chance level rises with it
+($\pi_s = 0.073 \to 0.059 \to 0.521$), prevalence-normalised lift falls
+monotonically ($1.79 \to 1.09$), and prevalence-free ROC-AUC falls with it
+($0.641 \to 0.570$). Normalised precision gain over chance is U-shaped
+($0.062 \to 0.026 \to 0.098$), so the direction of the effect is
+metric-dependent and we report all three rather than selecting one. Second,
+attribution is strongly non-monotone: navigation entropy carries 3.5\% of
+attribution mass at exploration, 22.4\% at consideration and 7.4\% at purchase
+intent, a trajectory that a whole-session attribution averages into a single
 uninformative value. Third, agreement between tree-based and recurrent
 attributions holds at the level of aggregate rankings but disappears at the
-level of individual journeys. Explanation quality tracks predictive signal,
-and we argue that it should therefore be validated per stage rather than per
-model.
+level of individual journeys. Explanation quality tracks predictive signal, and
+we argue that it should therefore be validated per stage rather than per model.
 \end{abstract}
 
 \begin{keyword}
@@ -174,19 +177,29 @@ attributions are compared against recurrent-model attributions both as
 aggregate rankings and, critically, at the level of individual journeys.
 
 The study follows a design science research methodology
-\citep{hevner2004design} and is pre-registered: every analytic decision was
-fixed before the test partition was opened, and each subsequent deviation is
-recorded with a date and rationale in a public amendment log (Appendix~A).
-Twenty-nine amendments were logged, several of which reverse an initial
+\citep{hevner2004design} under a written protocol frozen in advance
+(v1.0): every analytic decision---research questions, hypotheses, stage
+cut-points, feature families, splitting, models, metrics, thresholds and
+statistical procedures---was fixed before the test partition was opened, and
+each subsequent deviation is recorded with a date, a rationale and the
+affected protocol section in a public amendment log (Appendix~A). We
+describe this as a pre-specified rather than a publicly registered protocol,
+and the distinction is deliberate: the document was version-frozen and is
+distributed with the manuscript, but it was not deposited in a
+time-stamping registry, so readers should weight it as an auditable record
+of intent rather than as third-party-certified priority.
+Thirty-four amendments were logged, several of which reverse an initial
 decision on the basis of measurement; we regard this record as part of the
 contribution rather than an embarrassment to be hidden.
 
-Three empirical findings, each running against the pre-registered
-expectation, structure the paper. First, prevalence-normalised predictive
-performance declines monotonically across the funnel, so the operating
-regime in which explanations are most needed---early, when intervention is
-still possible---is also the regime in which the model is most skilled
-relative to chance. Second, attribution mass migrates substantially across
+Three empirical findings, each running against the pre-specified
+expectation, structure the paper. First, predictive performance does not
+improve along the funnel: the primary metric is non-monotone, ranking skill
+falls monotonically, and the one normalisation under which late-funnel
+performance recovers does so only to a tenth of the available headroom. The
+operating regime in which explanations are most needed---early, when
+intervention is still possible---is also the regime in which the model
+ranks best. Second, attribution mass migrates substantially across
 stages, with navigation behaviour peaking mid-funnel; a whole-session
 analysis provably flattens this structure. Third, aggregate agreement
 between explanation paradigms coexists with near-zero agreement about
@@ -199,7 +212,7 @@ analytics, and temporal validity, and states the research gap.
 Section~\ref{sec:framework} formalises the conceptual framework.
 Section~\ref{sec:methods} describes the data, the anti-leakage prefix
 protocol, the modelling, tuning and validation procedures.
-Section~\ref{sec:results} reports results against four pre-registered
+Section~\ref{sec:results} reports results against four pre-specified
 hypotheses. Section~\ref{sec:discussion} discusses implications, limitations
 and threats to validity. Section~\ref{sec:conclusion} concludes.
 
@@ -368,7 +381,7 @@ prefix-constrained attribution, and quantitative validation of the
 resulting explanations, instantiated end-to-end on a large e-commerce
 clickstream.
 
-\begin{figure}[t]
+\begin{figure}[htbp]
 \centering
 \includegraphics[width=\linewidth]{diag2_gap.pdf}
 \caption{Positioning of the proposed framework at the intersection of three
@@ -426,7 +439,7 @@ structurally, at the point where representations are constructed, rather
 than procedurally by convention within each analysis. The layers are
 formalised below.
 
-\begin{figure*}[t]
+\begin{figure*}[t!]
 \centering
 \includegraphics[width=\textwidth]{diag1_architecture.pdf}
 \caption{Architecture of the Funnel-Stage SHAP framework. Raw clickstream
@@ -553,20 +566,20 @@ phenomenon but to construct and rigorously evaluate an artifact---the
 Funnel-Stage SHAP framework---that addresses the methodological gap
 identified in Section~\ref{sec:related-gap}. Consistent with the DSR
 build--evaluate cycle (Figure~\ref{fig:dsr}), the artifact is instantiated
-end-to-end and evaluated against pre-registered hypotheses, with every
+end-to-end and evaluated against pre-specified hypotheses, with every
 deviation from the frozen protocol logged with date, rationale and affected
 sections (Appendix~A).
 
-\begin{figure}[t]
+\begin{figure}[htbp]
 \centering
 \includegraphics[width=\linewidth]{diag4_dsr.pdf}
 \caption{The design science research cycle as instantiated in this study:
 problem identification, artifact design, instantiation on two datasets,
-pre-registered evaluation, and a public amendment log closing the loop.}
+pre-specified evaluation, and a public amendment log closing the loop.}
 \label{fig:dsr}
 \end{figure}
 
-The evaluation is organised around four pre-registered hypotheses. H1,
+The evaluation is organised around four pre-specified hypotheses. H1,
 addressing RQ1, expected prevalence-normalised predictive performance to
 rise monotonically from exploration to purchase intent as behavioural
 evidence accumulates. H2, addressing RQ2, expected engagement-related
@@ -574,11 +587,11 @@ features to gain attribution mass across stages while contextual features
 lose it. H3 held that navigation entropy and click velocity carry predictive
 information beyond baseline aggregate features. H4, addressing RQ3, expected
 tree-based and recurrent attributions to agree on their shared concepts,
-with Spearman $\rho > 0.6$ as the pre-registered criterion. Every analytic
+with Spearman $\rho > 0.6$ as the pre-specified criterion. Every analytic
 decision---stage definitions, feature dictionary, splits, seeds, metrics,
 thresholds and statistical procedures---was fixed before the test partition
-was opened, and the frozen seed list $\{7, 17, 29, 42, 87\}$ governs all
-seeded procedures.
+was opened, and the frozen seed list $\{7, 17, 23, 42, 101\}$ (protocol
+Appendix~B) governs all seeded procedures.
 
 \subsection{Data sources}
 \label{sec:methods-data}
@@ -625,7 +638,7 @@ allows the sample-size sensitivity analysis of
 Section~\ref{sec:results-sensitivity} to interpret the 400{,}000-user
 superset as a controlled enlargement rather than a different draw.
 
-\begin{figure}[t]
+\begin{figure}[htbp]
 \centering
 \includegraphics[width=\linewidth]{fig1_data_flow.pdf}
 \caption{Data flow from 42.4M raw events to the analytical dataset. Every
@@ -651,7 +664,7 @@ attribution alike. The figure also makes the checkout-stage exclusion
 self-evident: the purchase event \emph{is} the label, so no admissible
 prefix for it exists.
 
-\begin{figure}[t]
+\begin{figure}[htbp]
 \centering
 \includegraphics[width=\linewidth]{diag3_prefix.pdf}
 \caption{The anti-leakage prefix protocol, illustrated on a single session.
@@ -762,7 +775,7 @@ Layer 3 evaluates explanation quality along four axes
 faithfulness correlation $> 0.5$; cross-seed and cross-paradigm Spearman
 $> 0.6$.
 
-\begin{figure}[t]
+\begin{figure}[htbp]
 \centering
 \includegraphics[width=\linewidth]{diag5_validation.pdf}
 \caption{The explanation validation layer: faithfulness (attribution vs.\
@@ -886,34 +899,37 @@ Figures~\ref{fig:curve} and~\ref{fig:stageperf}.
 \begin{table*}[t]
 \centering
 \caption{Stage models on the temporal split (LightGBM, default
-hyperparameters, five seeds). Chance-level PR-AUC equals the prevalence, so
-the lift column carries the cross-stage comparison. $N$ is the test
-partition size.}
+hyperparameters, five seeds). Chance-level PR-AUC equals the prevalence
+($\pi_s$). PR Lift is $\text{PR-AUC}/\pi_s$; PR Gain is
+$(\text{PR-AUC}-\pi_s)/(1-\pi_s)$, equivalently the fraction of attainable
+lift $\eta = (\text{PR-Lift}-1)/(\pi_s^{-1}-1)$ --- the two expressions are
+algebraically identical, so a single column reports both. $N$ is the test
+partition size; $\pm$ is the standard deviation over seeds.}
 \label{tab:stage-models}
 \small
-\begin{tabular}{@{}lS[table-format=5.0]S[table-format=1.3]cS[table-format=1.2]S[table-format=1.4]S[table-format=1.3]@{}}
+\begin{tabular}{@{}lS[table-format=5.0]S[table-format=1.4]cS[table-format=1.2]cS[table-format=1.4]S[table-format=1.3]@{}}
 \toprule
-\textbf{Stage} & {$N$ (test)} & {\textbf{Prevalence}} & \textbf{PR-AUC} &
-{\textbf{PR-AUC lift}} & {\textbf{ROC-AUC}} & {\textbf{ECE}} \\
+\textbf{Stage} & {$N$ (test)} & {\textbf{Prevalence $\pi_s$}} & \textbf{PR-AUC} &
+{\textbf{PR Lift}} & \textbf{PR Gain ($\eta$)} & {\textbf{ROC-AUC}} & {\textbf{ECE}} \\
 \midrule
-S1 & 38059 & 0.073 & $0.1312 \pm 0.0009$ & \bfseries 1.79 & 0.6406 & 0.010 \\
-S2 & 17884 & 0.059 & $0.0834 \pm 0.0015$ & \bfseries 1.41 & 0.6198 & 0.011 \\
-S3 & 2973  & 0.521 & $0.5681 \pm 0.0041$ & \bfseries 1.09 & 0.5695 & 0.017 \\
+S1 & 38059 & 0.0734 & $0.1312 \pm 0.0009$ & \bfseries 1.79 & $0.0624 \pm 0.0010$ & 0.6406 & 0.010 \\
+S2 & 17884 & 0.0589 & $0.0834 \pm 0.0015$ & \bfseries 1.41 & $0.0260 \pm 0.0016$ & 0.6198 & 0.011 \\
+S3 & 2973  & 0.5214 & $0.5681 \pm 0.0041$ & \bfseries 1.09 & $0.0976 \pm 0.0086$ & 0.5695 & 0.017 \\
 \bottomrule
 \end{tabular}
 \end{table*}
 
-\begin{figure}[t]
+\begin{figure}[htbp]
 \centering
 \includegraphics[width=\linewidth]{fig2_improvement_curve.pdf}
 \caption{The improvement curve (RQ1). Left: raw PR-AUC tracks its chance
 level (the stage prevalence) almost point for point, including the shared
-dip at S2. Right: the prevalence-normalised lift falls monotonically toward
-the chance line, and ROC-AUC falls with it.}
+dip at S2. Right: prevalence-normalised lift falls monotonically toward
+the chance line, while prevalence-free ROC-AUC declines from 0.641 to 0.570.}
 \label{fig:curve}
 \end{figure}
 
-\begin{figure}[t]
+\begin{figure}[htbp]
 \centering
 \includegraphics[width=\linewidth]{fig7_stage_performance.pdf}
 \caption{Stage-wise performance in full: (a) PR-AUC against its chance
@@ -923,39 +939,53 @@ reference values.}
 \label{fig:stageperf}
 \end{figure}
 
-\textbf{H1 is not supported; the direction of the effect is reversed.}
-Figure~\ref{fig:curve} makes the reversal visible in a single frame. In the
+\textbf{H1 is not supported under the pre-specified primary metric, and the
+direction of the effect is metric-dependent.} The protocol (\S11) fixes
+PR-AUC as primary and ROC-AUC as secondary, and H1 predicted that PR-AUC
+would rise monotonically from awareness to intent. It does not: PR-AUC runs
+$0.131 \to 0.083 \to 0.568$, falling before it rises, so the monotonicity
+H1 asserts fails on the primary metric before any normalisation is
+considered. We report the normalised views below because they disagree with
+each other, and selecting among them after seeing the results would be the
+metric-shopping the pre-specification exists to prevent.
+Figure~\ref{fig:curve} makes the performance dynamics visible across stages. In the
 left panel, raw PR-AUC ends at 0.568 against a starting 0.131, and a naive
 reading would conclude that prediction improves dramatically as customers
 approach purchase; but the chance-level curve tracks it almost point for
 point, because chance-level PR-AUC equals the prevalence and prevalence
 varies six-fold across the conditional stage populations---even the dip
 both curves share at S2 is a prevalence phenomenon
-(Section~\ref{sec:results-descriptive}), not a modelling one. The right
-panel divides one curve by the other, and the resulting lift falls
-monotonically from 1.79 toward the chance line at 1.0, reaching 1.09 at S3.
-Figure~\ref{fig:stageperf} completes the picture with the two quantities
-that cannot be attributed to base rates: panel~(b) shows ROC-AUC, which is
-prevalence-free, declining in parallel from 0.641 to 0.569 with seed error
-bars far smaller than the between-stage differences (seed standard
-deviations 0.0009--0.0041), and panel~(c) shows expected calibration error
-holding at 0.010--0.017 throughout, so the decline is a ranking phenomenon,
-not a probability artefact. Together the panels support a single reading:
-by the intent stage the model is barely above its own base rate, and nearly
-all of S3's apparently strong PR-AUC is prevalence, not skill.
+(Section~\ref{sec:results-descriptive}), not a modelling one. 
 
-The design does not isolate the mechanism. Three explanations remain
-compatible with the data: residual outcome uncertainty may genuinely shrink
-as checkout approaches, leaving little for behaviour to discriminate; the
-reachability conditions induce progressively more homogeneous populations;
-and the S3 evaluation set is small (2{,}973 test sessions), inflating
-estimation uncertainty. Section~\ref{sec:discussion-decline} develops the
-interpretation.
+When evaluated via prevalence-normalised metrics, two complementary patterns emerge.
+Under \emph{PR-AUC lift} ($\text{PR-AUC}/\pi_s$), performance falls monotonically from 1.79 to 1.09 toward the baseline.
+However, because PR-AUC lift has a prevalence-dependent ceiling ($\text{Max Lift} = 1/\pi_s$, imposing a ceiling of $13.7\times$ at S1 vs. $1.92\times$ at S3), lift measures relative multiplicative enhancement over chance rather than absolute distance to perfect precision.
+Under \emph{Normalised PR Gain} $(\text{PR-AUC} - \pi_s)/(1 - \pi_s)$ --- which is
+algebraically the attainable-lift fraction $\eta$, not an independent
+metric --- performance is U-shaped ($0.062 \to 0.026 \to 0.098$), recovering
+at Stage 3. The recovery is real but modest in absolute terms: even at its
+best the model closes under a tenth of the distance between chance and
+perfect precision, and the S3 seed standard deviation ($\pm 0.0086$) is the
+largest of the three stages, reflecting that stage's small test partition.
+Conversely, prevalence-free \emph{ROC-AUC} drops monotonically from 0.641 to 0.570 with seed standard deviations far smaller than cross-stage differences ($0.0009$--$0.0041$), confirming that the model's pure ranking skill degrades as intent consolidates.
+Expected calibration error holds at 0.010--0.017 throughout, so the ranking decline is not a probability calibration artefact.
+Two conclusions follow, and it matters that they are kept distinct. The
+first is a verdict: H1 predicted improvement and the data show none on the
+primary metric, so the hypothesis is rejected, and the ROC-AUC decline
+strengthens rather than qualifies that rejection, since it moves in the same
+direction on a prevalence-free scale. The second is a caution about
+inference: the three normalisations disagree about the shape of the
+trajectory, so no single prevalence-adjusted number characterises ``how
+predictable'' a stage is. Ranking skill falls monotonically as intent
+consolidates; the absolute precision headroom the model captures is smallest
+mid-funnel and largest at intent. Both are properties of the same fitted
+models, and Section~\ref{sec:discussion-decline} interprets them together
+rather than adjudicating between them.
 
 \subsection{Feature-family ablation (H3)}
 \label{sec:results-ablation}
 
-Table~\ref{tab:ablation} reports the pre-registered nine-contrast family
+Table~\ref{tab:ablation} reports the pre-specified nine-contrast family
 with stratified paired bootstrap intervals and Holm correction.
 
 \begin{table*}[t]
@@ -1029,7 +1059,7 @@ Weekend indicator        & 0.010 & 0.011 & 0.020 \\
 \end{tabular}
 \end{table}
 
-\begin{figure}[t]
+\begin{figure}[htbp]
 \centering
 \includegraphics[width=\linewidth]{fig3_attribution_migration.pdf}
 \caption{Attribution migration across stages (RQ2). Engagement rises and
@@ -1038,7 +1068,7 @@ consideration.}
 \label{fig:migration}
 \end{figure}
 
-\begin{figure}[t]
+\begin{figure}[htbp]
 \centering
 \includegraphics[width=\linewidth]{fig8_migration_alluvial.pdf}
 \caption{Alluvial view of the same migration: each band is a feature
@@ -1062,10 +1092,8 @@ alluvial view this family's band visibly narrows to a thread after S1.
 rising from 3.5\% to 22.4\% at consideration before falling back to
 7.4\%---most informative precisely when customers compare alternatives. In
 Figure~\ref{fig:migration} this appears as the sharpest mid-funnel peak in
-the panel, and it is exactly the shape that whole-session attribution
-destroys: a static analysis assigns this family 11.1\% throughout, against
-a stage-conditioned peak of 22.4\%, so the most distinctive temporal
-structure in the explanation is averaged into invisibility. \emph{Price} remains influential at every stage (43.7\%,
+the panel, and Section~\ref{sec:results-rq4} shows empirically that a
+whole-session model does not recover it. \emph{Price} remains influential at every stage (43.7\%,
 23.9\%, 37.9\%), indicating that price context conditions the journey
 throughout rather than operating only at selection; its dip at
 consideration mirrors, almost exactly, the navigation peak, suggesting that
@@ -1087,6 +1115,74 @@ features.
 Because stage populations differ (Section~\ref{sec:results-descriptive}),
 trajectories are read as stage-conditioned explanation profiles rather than
 within-session causal evolution; their reliability is established next.
+
+\subsection{What a whole-session analysis reports instead (RQ4)}
+\label{sec:results-rq4}
+
+RQ4 asks whether stage conditioning surfaces intervention points that a
+static whole-session analysis misses. Answering it requires an actual
+whole-session model, so we fitted one: the same LightGBM configuration and
+the same interventional TreeSHAP, aggregated over the entire session with no
+cut-point applied, evaluated on the same frozen temporal split and
+aggregated under the same reference grouping
+(Table~\ref{tab:whole-session}).
+
+\begin{table}[t]
+\centering
+\caption{Empirical whole-session model versus the stage-conditioned
+trajectory. Shares are proportions of mean absolute SHAP mass under the
+common reference grouping. ``Flattening'' is the stage-conditioned peak
+minus the whole-session share.}
+\label{tab:whole-session}
+\small
+\begin{tabular}{@{}lS[table-format=1.3]lS[table-format=1.3]S[table-format=1.3]@{}}
+\toprule
+\textbf{Family} & {\textbf{Stage peak}} & \textbf{at} &
+{\textbf{Whole-session}} & {\textbf{Flattening}} \\
+\midrule
+Price context            & 0.437 & S1 & 0.002 & 0.435 \\
+Engagement / temporal    & 0.368 & S2 & 0.057 & 0.311 \\
+Navigation / categories  & 0.224 & S2 & 0.025 & 0.198 \\
+Hour of day              & 0.157 & S1 & 0.001 & 0.156 \\
+Product views / revisits & 0.192 & S1 & 0.109 & 0.083 \\
+Weekend indicator        & 0.020 & S3 & 0.000 & 0.019 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Two results follow, and the first is about prediction rather than
+explanation. The whole-session model attains a test PR-AUC of 0.9995 and a
+ROC-AUC of 0.9999 at a prevalence of 0.089---effectively perfect
+separation, against 0.131 for the best stage model. That gap is not
+evidence that whole-session modelling is superior; it is the size of the
+leakage. A model permitted to count the events of a completed session can
+read the outcome off the session's own length, and its apparent excellence
+is an artefact of being asked a question that no deployed system is ever in
+a position to ask.
+
+The attribution profile shows where that predictive weight sits. Three
+quarters of the whole-session model's explanatory mass falls on quantities
+that only exist once the session is over: total event and view counts carry
+57.5\% and a purchase-intent composite a further 18.6\%. What remains for
+the behavioural families the stage models rely on is correspondingly thin.
+Price context, which dominates the exploration stage at 43.7\%, receives
+0.2\%. Navigation and category behaviour, which peaks at 22.4\% mid-funnel,
+receives 2.5\%. The static analysis does not merely average the trajectory
+into a flat value, as an earlier and weaker version of this comparison
+assumed; it reallocates attention almost entirely onto session-completion
+artefacts and reports the behavioural drivers as near-irrelevant.
+
+\textbf{RQ4 is answered affirmatively, with a qualification about the
+comparison itself.} Four features in the whole-session vocabulary
+(\texttt{n\_events}, \texttt{n\_views}, \texttt{inter\_event\_std\_s} and
+\texttt{purchase\_intent\_score}) fall outside the reference grouping, which
+is derived from the earliest and coarsest stage, so they are reported as
+their own families rather than merged into the six above. Those four are
+precisely the ones carrying the leaked signal, so the qualification does not
+weaken the finding; but it does mean the share columns are not a partition
+of a common vocabulary, and the flattening column should be read as the loss
+of a family's stage-specific prominence rather than as a conserved transfer
+of mass.
 
 \subsection{Explanation quality (RQ3)}
 \label{sec:results-quality}
@@ -1116,11 +1212,11 @@ S3 & $0.565 \pm 0.169$ & \pass & 0.3495 & 0.5898 & 0.028 / 0.010 & 0.943 / 0.886
 \end{tabular}
 \end{table*}
 
-\begin{figure}[t]
+\begin{figure}[htbp]
 \centering
 \includegraphics[width=\linewidth]{fig4_explanation_quality.pdf}
 \caption{Explanation quality by stage: faithfulness against its
-pre-registered threshold, deletion versus insertion AUC, and cross-seed
+pre-specified threshold, deletion versus insertion AUC, and cross-seed
 agreement of the importance ordering.}
 \label{fig:quality}
 \end{figure}
@@ -1131,7 +1227,7 @@ shows all three stages clustered in a narrow band around the threshold
 while the consistency panel shows all three pinned near the ceiling, so the
 quality profile is high-reproducibility, moderate-faithfulness everywhere,
 rather than degrading with depth in the funnel. \emph{Faithfulness} sits
-between 0.494 and 0.571, and S2 misses the pre-registered bar; we report
+between 0.494 and 0.571, and S2 misses the pre-specified bar; we report
 this as a failure rather than rounding it up. The magnitudes carry their
 own message: the explanations capture a substantial but not exhaustive
 portion of the models' mechanisms, and should be read as informative
@@ -1173,7 +1269,7 @@ attributable to one incompetent arm.
 
 At the level of \emph{aggregate rankings}, Spearman correlations between
 TimeSHAP and TreeSHAP are $+0.200$ (S1), $+0.500$ (S2) and $+0.600$ (S3)
-against a pre-registered threshold of 0.6. \textbf{H4 is not supported},
+against a pre-specified threshold of 0.6. \textbf{H4 is not supported},
 though the test is severely underpowered: the paradigms share only four or
 five mappable concepts, and with four items Spearman takes only a handful of
 discrete values. The pre-registration did not anticipate how few concepts
@@ -1281,7 +1377,7 @@ prior-probability shift, and the reasons the textbook choice of calibration
 set inverts under drift are developed in
 Section~\ref{sec:discussion-method}.
 
-\begin{figure}[t]
+\begin{figure}[htbp]
 \centering
 \includegraphics[width=0.85\linewidth]{fig5_reliability.pdf}
 \caption{Reliability under prior-probability shift (Dataset A). Calibrating
@@ -1296,13 +1392,21 @@ restores calibration.}
 \label{sec:discussion}
 %==============================================================================
 
-\subsection{Why predictability declines as intent forms}
+\subsection{Why ranking skill declines as intent forms}
 \label{sec:discussion-decline}
 
-The clearest result contradicts the pre-registered hypothesis: normalised
-predictive performance falls across the funnel. Because this is a negative
-result against a directional expectation, it deserves a substantive rather
-than merely statistical interpretation. The pattern admits a selection
+The clearest result contradicts the pre-specified hypothesis: predictive
+performance does not improve along the funnel, and on the prevalence-free
+scale it deteriorates. Because this is a negative result against a
+directional expectation, it deserves a substantive rather than merely
+statistical interpretation. Two quantities must be held apart first. Ranking
+skill---who is more likely to convert than whom---falls monotonically.
+Precision headroom captured over chance is U-shaped, recovering at intent.
+These are not in conflict: at a base rate of 52\% a model can place many
+converters above many non-converters while ordering them poorly, because
+the bar chance already clears is high. The interpretation below concerns
+ranking skill, which is the quantity an intervention system actually
+consumes when it decides whom to target. The pattern admits a selection
 reading: each successive stage conditions on an increasingly committed
 population, and conditioning on commitment removes precisely the
 behavioural variance that discriminates purchasers from non-purchasers.
@@ -1328,20 +1432,20 @@ answerable, through the empirical finding, to the theoretical claim it
 licenses. The map makes the design-science character of the study explicit:
 each finding is produced by precisely the component---prefix-only features
 with lift as the cross-stage metric, stage-conditioned attribution,
-pre-registered validation with per-instance agreement, the static
+pre-specified validation with per-instance agreement, the static
 contrast---that conventional pipelines omit, which is the sense in which
 the artifact, and not merely the dataset, generates the knowledge. The
 map's bottom line is also its epistemic posture: three of the four
-pre-registered hypotheses were not supported, and all four are reported as
+pre-specified hypotheses were not supported, and all four are reported as
 found.
 
-\begin{figure}[t]
+\begin{figure}[htbp]
 \centering
 \includegraphics[width=\linewidth]{diag6_contributions.pdf}
 \caption{Contribution map. Each research question is traced from the
 methodological innovation that makes it answerable, through the empirical
 finding, to the theoretical contribution it supports. Three of the four
-pre-registered hypotheses were not supported; all four are reported as
+pre-specified hypotheses were not supported; all four are reported as
 found.}
 \label{fig:contributions}
 \end{figure}
@@ -1355,7 +1459,9 @@ regimes \citep{bucklin2003model, lemon2016understanding}. The mid-funnel
 peak of navigation entropy is the sharpest illustration---comparison
 behaviour is maximally informative exactly when the staged account says
 customers compare---and it is structurally invisible to whole-session
-attribution, which averages the 3.5/22.4/7.4 trajectory into a flat 11.1\%.
+attribution, which assigns the family 2.5\% while resting three quarters of
+its own explanatory weight on whole-session volume
+(Section~\ref{sec:results-rq4}).
 The coexistence of high attribution share with negligible unique predictive
 contribution (Section~\ref{sec:results-ablation}) is itself informative:
 attribution answers ``what evidence does the model lean on,'' ablation
@@ -1473,13 +1579,15 @@ time or an average over regimes the journey keeps distinct. Funnel-Stage
 SHAP enforces the prefix constraint at the representation level, conditions
 both model and explanation on the funnel stage, and validates the resulting
 explanations for faithfulness, stability and reproducibility. Applied
-end-to-end, the framework reversed one pre-registered expectation
-(prevalence-normalised predictability declines as intent forms), quantified
-a second (attribution mass migrates, with navigation behaviour peaking
-mid-funnel), and split a third (explanation paradigms agree in aggregate
-and disagree per instance). Each finding is invisible to the standard
-pipeline: the first without prevalence normalisation, the second without
-stage conditioning, the third without instance-level validation.
+end-to-end, the framework refuted one pre-specified expectation (predictive
+performance does not improve along the funnel; ranking skill falls, and the
+direction of the effect depends on which normalisation is applied),
+quantified a second (attribution mass migrates, with navigation behaviour
+peaking mid-funnel), and split a third (explanation paradigms agree in
+aggregate and disagree per instance). Each finding is invisible to the
+standard pipeline: the first without reporting chance level alongside
+performance, the second without stage conditioning, the third without
+instance-level validation.
 
 The broader argument is that explanation quality tracks predictive signal
 and should be validated where decisions are made---per stage, and where
@@ -1518,8 +1626,7 @@ a self-contained rebuild, since the raw 42.4-million-event log is not
 redistributed with the repository.
 
 \section*{Declaration of generative AI in the writing process}
-% NOTE TO AUTHORS: complete per journal policy before submission.
-[To be completed in accordance with the journal's generative-AI policy.]
+During the preparation of this work, the authors used AI assistant tools (Anthropic Claude and Google Gemini models) for code optimization, refactoring analysis scripts, and language editing of draft manuscript sections. After using these tools, the authors reviewed and edited the content as needed and take full responsibility for the content of the publication.
 
 %==============================================================================
 \appendix
@@ -1527,7 +1634,7 @@ redistributed with the repository.
 \label{app:amendments}
 %==============================================================================
 
-The pre-registered protocol (v1.0) and the complete dated amendment log (29
+The pre-specified protocol (v1.0) and the complete dated amendment log (34
 entries) accompany this manuscript. Amendments record every deviation from
 the frozen protocol with its date, rationale and affected sections,
 including three cut-point redefinitions made on the basis of measurement

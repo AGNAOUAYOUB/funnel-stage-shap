@@ -856,3 +856,148 @@ match exactly, with no floating-point drift in any column. The seeded pipeline i
 therefore deterministic on this machine, and the reported numbers survive
 regeneration from the frozen splits. The run is logged with 426 metrics, four output
 tables and its git commit.
+
+---
+
+## 2026-08-07 — Cross-paradigm baseline trained to convergence
+
+### A30. GRU retrained with convergence guarantees (Sec. 9.3, 11.2, H4)
+
+**What was wrong.** The GRU sequence model used as the cross-paradigm baseline
+(H4) ran for a fixed 8 epochs with 48 hidden units and no hyperparameter tuning.
+This was acknowledged as a limitation in the manuscript, but a reviewer
+identified it as a fairness violation: a tree model trained with full Optuna
+tuning compared against a hastily-trained recurrent model cannot produce a
+credible convergent-validity verdict. Either the GRU must be trained to
+convergence, or H4 must be withdrawn.
+
+**Decision.** Train the GRU to convergence. H4 is retained.
+
+**Architectural changes to `models/sequence.py`:**
+
+1. **Early stopping** on validation PR-AUC with configurable patience (default
+   10 epochs). The best checkpoint is restored at the end, so the returned
+   model is always the highest-scoring one observed during training.
+2. **Cosine-annealing LR schedule** (`CosineAnnealingLR`, η_min = 0.01 ×
+   η_max) prevents the learning rate from being too large in later epochs.
+3. **Gradient clipping** (`clip_grad_norm_`, max_norm=1.0) stabilises training
+   on longer prefixes where gradients through many timesteps can accumulate.
+4. **Stacked GRU layers** (default 2, was 1) with inter-layer dropout (default
+   0.2, was 0), giving the model enough capacity to match the tree baseline
+   while regularising against overfitting the smaller training sets (e.g.
+   S3's ~2,900 test sessions).
+5. **Wider hidden state** (default 128, was 48).
+
+**New defaults:** `epochs=80, patience=10, hidden=128, num_layers=2,
+dropout=0.2, grad_clip=1.0, lr=1e-3` with cosine schedule. These replace the
+original `epochs=8, hidden=48`.
+
+**Optuna tuning added.** `SEARCH_SPACES["gru"]` in `models/tuning.py` and a
+`tune_gru()` function allow systematic search over `{hidden, num_layers,
+dropout, learning_rate, batch_size}`. The CLI command `tune-gru` runs 30 trials
+per stage (fewer than the 100 used for tree models because each GRU trial is
+slower; 30 suffices for the compact 5-parameter space).
+
+**CLI propagation.** `sequence-arm` and `per-instance-h4` commands now accept
+`--epochs`, `--patience`, `--hidden`, `--num-layers`, `--dropout` flags.
+Defaults are the convergence-trained values above.
+
+**What must be re-run before the numbers are final.** The `sequence-arm` and
+`per-instance-h4` commands must be re-executed with the new defaults (or with
+tuned hyperparameters from `tune-gru`) across all five seeds. The H4 table,
+per-instance H4 table, and any GRU PR-AUC values cited in the paper will change.
+
+**Impact on conclusions.** To be determined after retraining. Expected effects:
+- GRU test PR-AUC should improve, particularly at S2 where the gap was largest
+  (0.059 vs 0.083 for the tree model).
+- Aggregate H4 agreement may shift. The question is whether convergence training
+  makes the GRU's explanation structure *more* like the tree's (better agreement)
+  or *less* (the paradigms genuinely differ). Either answer is informative.
+- Per-instance agreement is expected to remain near zero — it was already
+  uniform across seeds (A23b), and the finding is about paradigm structure, not
+  model quality.
+
+---
+
+## 2026-08-07 — Alignment with the registered protocol v1.0
+
+The registered protocol PDF was supplied on 2026-08-07 and every section was
+checked against the implementation. Entries A30-A33 record what that audit found.
+
+### A30. Reported seed list in prose disagreed with the protocol and the code (Appendix B)
+
+**What was wrong.** Protocol Appendix B fixes `SEEDS = [7, 17, 23, 42, 101]`, and
+`seeds.py` and every result table use exactly that. But the manuscript, the README and
+one `dvc.yaml` stage stated `{7, 17, 29, 42, 87}`, a list that appears nowhere in the
+code. The `dvc.yaml` stage would have failed at run time, since `RunConfig` rejects
+seeds outside the frozen list.
+
+**Fix.** Corrected in all four locations. No computation was affected: the runs always
+used the protocol seeds, so the results stand and only the prose describing them was
+wrong. Recorded here rather than silently corrected because a reader checking
+reproducibility against the paper would have been unable to reproduce it.
+
+### A31. The reported attainable-lift fraction was the raw PR-AUC (Sec. 11)
+
+**What was wrong.** Table 4 carried an $\eta$ column defined in its own caption as
+$(\text{Lift}-1)/(\pi_s^{-1}-1)$ but populated with 13.1\%/8.3\%/56.8\%, which are the
+raw PR-AUC values times 100. The true values are 6.2\%/2.6\%/9.8\%. The abstract and
+Sec. 5.2 both promoted the S3 figure to a headline ("reaching 56.8% of maximum
+attainable lift"), overstating it roughly six-fold. The table was additionally
+self-contradictory: $\eta$ and PR-Gain are algebraically the same quantity, yet the S3
+row reported 0.0983 and 56.8% side by side.
+
+**Fix.** The two columns are merged into one, computed per seed with a standard
+deviation, and the abstract and results text now state the corrected values. The
+U-shape itself is real and survives the correction ($0.062 \to 0.026 \to 0.098$); what
+does not survive is the claim that S3 recovers most of the attainable headroom. It
+recovers under a tenth of it.
+
+### A32. H1 was reported against the secondary metric (Sec. 11, H1)
+
+**What was wrong.** Protocol Sec. 11 fixes PR-AUC as the primary metric and ROC-AUC as
+secondary, and H1 predicts PR-AUC rises monotonically. The manuscript reported "H1 is
+partially supported under ROC-AUC" — support claimed on the secondary metric, and from
+a *declining* ROC-AUC, which contradicts H1 rather than supporting it.
+
+**Fix.** H1 is reported as not supported under the primary metric: PR-AUC runs
+$0.131 \to 0.083 \to 0.568$ and is non-monotone before any normalisation. All three
+normalisations are reported together because they disagree about direction, and the
+disagreement is presented as a finding about metric choice rather than resolved by
+picking the most favourable one.
+
+### A33. The RQ4 whole-session comparator was circular; replaced with a fitted model
+
+**What was wrong.** The static comparator was the arithmetic mean of the three stage
+shares (3.5, 22.4, 7.4 -> 11.1). That identity holds by construction and tests nothing
+about how a whole-session model behaves.
+
+**Fix.** A whole-session LightGBM was fitted on unconstrained sessions and explained
+with the same TreeSHAP and reference grouping (`explain/whole_session.py`, 7 tests).
+Results: test PR-AUC 0.9995 / ROC-AUC 0.9999 at prevalence 0.089, against 0.131 for the
+best stage model — the gap is a direct measure of the leakage. Attribution: 57.5% on
+total event and view counts and 18.6% on a purchase-intent composite, leaving price at
+0.2% and navigation at 2.5% against stage peaks of 43.7% and 22.4%.
+
+**Qualification recorded.** Four whole-session features fall outside the S1-derived
+reference grouping, so the share columns are not a partition of one vocabulary. Those
+four carry the leaked signal, so the direction of the finding is unaffected, but the
+flattening column measures loss of stage-specific prominence rather than a conserved
+transfer of mass.
+
+**A defect caught in development, recorded because it nearly shipped.** The first
+implementation grouped whole-session features by ablation family while the stage table
+used correlated-feature clusters. The taxonomies were disjoint, so every share computed
+as zero and the contrast would have read as "the static model ignores every behavioural
+family" — a fabricated result. The module now raises on a disjoint grouping rather than
+returning zeros, and a test covers it.
+
+### A34. Protocol items implemented but not exercised (Sec. 5.1, 13)
+
+**McNemar** (Sec. 13) is implemented in `evaluate/comparisons.py` but is not invoked by
+any pipeline command; the reported confirmatory family uses paired bootstrap intervals
+with Holm correction, which the same section also permits. **quantus** (Sec. 5.1) is
+listed as the XAI-evaluation library but the faithfulness, deletion/insertion and
+stability metrics are implemented directly against their source papers rather than
+through it. Neither changes a reported number; both are deviations from the letter of
+the protocol and are recorded rather than left to inference.

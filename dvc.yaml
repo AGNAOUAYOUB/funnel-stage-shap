@@ -209,7 +209,7 @@ stages:
     # Amendment A22/A23b: H4 per journey, over the frozen seed list.
     cmd: >-
       python -m funnel_shap.cli per-instance-h4 --suffix gap30s200000
-      --seeds 7,17,29,42,87
+      --seeds 7,17,23,42,101
     deps:
       - data/interim/sessions_gap30s200000.parquet
       - data/interim/cutpoints_gap30s200000.parquet
@@ -258,3 +258,17 @@ stages:
       metrics:
         - reports/tables/stage_prevalence_gap${item}s200000.csv:
             cache: false
+
+  whole_session:
+    # RQ4: empirical whole-session comparator (amendment A33). Deliberately
+    # leaky by construction; its score measures the cost of the practice.
+    cmd: python -m funnel_shap.cli whole-session --suffix gap30s200000
+    deps:
+      - data/interim/sessions_gap30s200000.parquet
+      - data/interim/cutpoints_gap30s200000.parquet
+      - data/processed/splits/split_gap30s200000_temporal.parquet
+      - reports/tables/stage_importance_gap30s200000.csv
+      - src/funnel_shap/explain/whole_session.py
+    metrics:
+      - reports/tables/whole_session_contrast_gap30s200000.csv:
+          cache: false

@@ -690,7 +690,11 @@ def sequence_arm(
     suffix: str = _SUFFIX_OPT,
     protocol: str = "temporal",
     seed: int = 42,
-    epochs: int = 6,
+    epochs: int = typer.Option(80, help="Max epochs (early stopping may halt sooner)"),
+    patience: int = typer.Option(10, help="Early-stopping patience on val PR-AUC"),
+    hidden: int = typer.Option(128, help="GRU hidden state size"),
+    num_layers: int = typer.Option(2, help="Number of stacked GRU layers"),
+    dropout: float = typer.Option(0.2, help="Dropout between layers and before head"),
     max_sessions: int = 60000,
     timeshap: bool = typer.Option(True, help="Use TimeSHAP; falls back to permutation"),
 ) -> None:
@@ -700,6 +704,11 @@ def sequence_arm(
     from .data.journey import MODELLING_STAGES
     from .explain.run_sequence import h4_table, run_sequence_arm
     from .explain.run_stage_shap import explain_stages, stage_importance_table
+
+    gru_kwargs = dict(
+        hidden=hidden, num_layers=num_layers, dropout=dropout,
+        patience=patience,
+    )
 
     sessions = pl.read_parquet(paths.INTERIM / f"sessions_{suffix}.parquet")
     cuts = pl.read_parquet(paths.INTERIM / f"cutpoints_{suffix}.parquet")
@@ -724,6 +733,7 @@ def sequence_arm(
         sessions, cuts, suffix=suffix, protocol=protocol, seed=seed,
         epochs=epochs, max_sessions=max_sessions,
         use_timeshap=timeshap, tabular_importance=tabular,
+        **gru_kwargs,
     )
     if not results:
         raise typer.BadParameter("no stage produced a sequence model")
@@ -748,6 +758,81 @@ def sequence_arm(
     typer.echo(f"-> {paths.TABLES / f'h4_cross_paradigm_{suffix}.csv'}")
 
     _ = stage_importance_table
+
+
+@app.command("tune-gru")
+def tune_gru_cmd(
+    suffix: str = _SUFFIX_OPT,
+    protocol: str = "temporal",
+    seed: int = 42,
+    n_trials: int = typer.Option(30, help="Optuna trials per stage"),
+    epochs: int = typer.Option(80, help="Max epochs per trial"),
+    patience: int = typer.Option(10, help="Early-stopping patience per trial"),
+    max_sessions: int = 60000,
+    max_len: int = 32,
+) -> None:
+    """Optuna tuning for the GRU sequence model (amendment A30)."""
+    paths.ensure_dirs()
+    import json
+
+    import numpy as np
+
+    from .data.journey import MODELLING_STAGES, prefix_events
+    from .data.splits import load_split
+    from .models.sequence import build_sequences
+    from .models.tuning import tune_gru
+
+    sessions = pl.read_parquet(paths.INTERIM / f"sessions_{suffix}.parquet")
+    cuts = pl.read_parquet(paths.INTERIM / f"cutpoints_{suffix}.parquet")
+    split = load_split(suffix, protocol)
+    rng = np.random.default_rng(seed)
+
+    rows = []
+    for stage in MODELLING_STAGES:
+        prefix = prefix_events(sessions.lazy(), cuts, stage).collect()
+        prefix = prefix.join(
+            split.select(["session_id", "partition"]), on="session_id", how="inner"
+        )
+        if prefix.is_empty():
+            continue
+
+        ids = prefix["session_id"].unique()
+        if ids.len() > max_sessions:
+            keep = pl.Series("session_id", rng.choice(ids.to_numpy(), max_sessions, replace=False))
+            prefix = prefix.filter(pl.col("session_id").is_in(keep))
+
+        batch = build_sequences(prefix, max_len=max_len)
+        partition = (
+            prefix.group_by("session_id", maintain_order=True)
+            .agg(pl.first("partition"))
+            .join(pl.DataFrame({"session_id": batch.session_ids}), on="session_id", how="right")
+        )["partition"].to_numpy()
+
+        import numpy as np  # already imported above, but ensure availability
+        idx = {name: np.flatnonzero(partition == name) for name in ("train", "val", "test")}
+        if any(len(v) == 0 for v in idx.values()):
+            continue
+
+        typer.echo(f"tuning GRU for {stage} ({n_trials} trials) ...")
+        result = tune_gru(
+            batch, idx["train"], idx["val"],
+            stage=stage, n_trials=n_trials, seed=seed,
+            epochs=epochs, patience=patience,
+        )
+        typer.echo(f"  {result.summary()}")
+        rows.append({
+            "stage": stage, "model": "gru", "seed": seed,
+            "protocol": protocol, "n_trials": result.n_trials,
+            "n_completed": result.n_completed, "n_pruned": result.n_pruned,
+            "best_val_pr_auc": result.best_value,
+            "best_params": json.dumps(result.best_params, sort_keys=True),
+        })
+
+    if not rows:
+        raise typer.BadParameter(f"no stage could be tuned for suffix {suffix!r}")
+    out = paths.TABLES / f"tuning_gru_{suffix}.csv"
+    pl.DataFrame(rows).write_csv(out)
+    typer.echo(f"\n-> {out}")
 
 
 @app.command()
@@ -786,6 +871,72 @@ def figures(suffix: str = _SUFFIX_OPT) -> None:
     typer.echo(f"\n-> {paths.FIGURES}")
 
 
+@app.command("whole-session")
+def whole_session_cmd(
+    suffix: str = _SUFFIX_OPT,
+    protocol: str = "temporal",
+    seed: int = 42,
+    max_explain: int = 4000,
+    background_size: int = 300,
+    track: bool = typer.Option(True, help="Log the run to MLflow (Sec. 6.2)"),
+) -> None:
+    """RQ4: an empirical whole-session model to contrast against the stages."""
+    paths.ensure_dirs()
+
+    from .explain.whole_session import (
+        contrast_table,
+        member_to_group,
+        run_whole_session_contrast,
+    )
+
+    importance_path = paths.TABLES / f"stage_importance_{suffix}.csv"
+    if not importance_path.exists():
+        raise typer.BadParameter(
+            f"no stage importance table at {importance_path}; run stage-shap first"
+        )
+
+    importance = pl.read_csv(importance_path)
+    # The whole-session model must be aggregated under the stage models'
+    # reference grouping, or the two share taxonomies do not align.
+    grouping = member_to_group(importance["group"].unique().to_list())
+
+    sessions = pl.read_parquet(paths.INTERIM / f"sessions_{suffix}.parquet")
+    cuts = pl.read_parquet(paths.INTERIM / f"cutpoints_{suffix}.parquet")
+
+    result = run_whole_session_contrast(
+        sessions, cuts, suffix=suffix, protocol=protocol, seed=seed,
+        max_explain=max_explain, background_size=background_size,
+        grouping=grouping,
+    )
+    typer.echo(result.summary())
+
+    table = contrast_table(importance, result)
+    out = paths.TABLES / f"whole_session_contrast_{suffix}.csv"
+    table.write_csv(out)
+
+    typer.echo("")
+    typer.echo(table.select(
+        ["group", "stage_peak", "stage_peak_at", "whole_session_share", "flattening"]
+    ))
+    typer.echo("")
+    typer.echo(f"-> {out}")
+
+    from .tracking import track_run
+
+    with track_run(
+        f"whole-session/{suffix}",
+        experiment="whole-session",
+        params={"suffix": suffix, "protocol": protocol, "seed": seed},
+        enabled=track,
+    ) as run:
+        run.log_metrics({
+            "pr_auc": result.pr_auc, "roc_auc": result.roc_auc,
+            "prevalence": result.prevalence, "n_test": result.n_test,
+        })
+        run.log_metrics({f"whole_share.{k}": v for k, v in result.shares.items()})
+        run.log_artifact(out)
+
+
 @app.command()
 def static_contrast(suffix: str = _SUFFIX_OPT) -> None:
     """RQ4: what a static whole-session attribution would flatten (Sec. 11.1)."""
@@ -810,7 +961,11 @@ def per_instance_h4(
     suffix: str = _SUFFIX_OPT,
     protocol: str = "temporal",
     seeds: str = typer.Option("42", help="Comma-separated seeds from the frozen list"),
-    epochs: int = 4,
+    epochs: int = typer.Option(40, help="Max epochs for each seed's GRU (early stopping applies)"),
+    patience: int = typer.Option(8, help="Early-stopping patience"),
+    hidden: int = typer.Option(128, help="GRU hidden state size"),
+    num_layers: int = typer.Option(2, help="Number of stacked GRU layers"),
+    dropout: float = typer.Option(0.2, help="Dropout rate"),
     max_sessions: int = 30000,
     n_explain: int = 400,
 ) -> None:
@@ -848,7 +1003,9 @@ def per_instance_h4(
         )
         sequence = run_sequence_arm(
             sessions, cuts, suffix=suffix, protocol=protocol, seed=seed,
-            epochs=epochs, max_sessions=max_sessions, n_explain=n_explain,
+            epochs=epochs, patience=patience, max_sessions=max_sessions,
+            n_explain=n_explain,
+            hidden=hidden, num_layers=num_layers, dropout=dropout,
             restrict_to_sessions={
                 stage: e.explained_session_ids for stage, e in explanations.items()
             },

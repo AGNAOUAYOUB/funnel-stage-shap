@@ -97,7 +97,7 @@ distinction matters more than the label "reproducible".
 
 **Scripted and seeded (strong).** Every reported number is produced by a
 `funnel-shap` CLI command against splits frozen on disk and the frozen seed list
-`{7, 17, 29, 42, 87}`. Given the same inputs, re-running a command reproduces its
+`{7, 17, 23, 42, 101}`. Given the same inputs, re-running a command reproduces its
 table. Notebooks are for exploration only.
 
 **Run logging (strong, from 2026-08-06).** `stage-models`, `baselines-a` and
