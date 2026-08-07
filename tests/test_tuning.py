@@ -30,13 +30,21 @@ def data():
     )
 
 
+#: Non-baseline models that legitimately carry a search space. Protocol Sec. 10
+#: tunes the sequence arm as well as the baselines, so the registry is a
+#: superset of BASELINE_MODELS -- but a *declared* superset, so that a typo'd
+#: key still fails this test rather than silently registering a new model.
+TUNABLE_SEQUENCE_MODELS = {"gru"}
+
+
 def test_every_baseline_has_a_fixed_search_space() -> None:
     """Sec. 9.5 requires the spaces fixed and logged; a literal in source is both."""
     from funnel_shap.models.baselines import BASELINE_MODELS
 
-    assert set(SEARCH_SPACES) == set(BASELINE_MODELS)
-    for space in SEARCH_SPACES.values():
-        assert space, "an empty search space would silently skip tuning"
+    assert set(BASELINE_MODELS) <= set(SEARCH_SPACES), "a baseline lost its search space"
+    assert set(SEARCH_SPACES) - set(BASELINE_MODELS) == TUNABLE_SEQUENCE_MODELS
+    for name, space in SEARCH_SPACES.items():
+        assert space, f"empty search space for {name!r} would silently skip tuning"
 
 
 def test_unknown_model_is_rejected(data) -> None:
