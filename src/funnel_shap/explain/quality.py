@@ -185,6 +185,51 @@ def insertion_curve(
                   insert=True, tolerance=tolerance)
 
 
+def random_curve(
+    predict: callable,
+    X: np.ndarray,
+    background: np.ndarray,
+    *,
+    n_steps: int = 10,
+    n_draws: int = 5,
+    seed: int = 42,
+    insert: bool = False,
+) -> CurveResult:
+    """Random-order feature replacement baseline for insertion/deletion curves."""
+    X = np.asarray(X, dtype=float)
+    background = np.asarray(background, dtype=float)
+    rng = np.random.default_rng(seed)
+    n_instances, n_features = X.shape
+
+    fractions = np.linspace(0.0, 1.0, n_steps + 1)
+    all_means = []
+
+    for _ in range(n_draws):
+        order = np.array([rng.permutation(n_features) for _ in range(n_instances)])
+        baseline = np.stack([_baseline_row(background, rng) for _ in range(n_instances)])
+        draw_means = np.empty(len(fractions))
+        for step, fraction in enumerate(fractions):
+            k = int(round(fraction * n_features))
+            current = (baseline if insert else X).copy()
+            if k > 0:
+                rows = np.repeat(np.arange(n_instances), k)
+                cols = order[:, :k].ravel()
+                source = X if insert else baseline
+                current[rows, cols] = source[rows, cols]
+            draw_means[step] = float(np.mean(predict(current)))
+        all_means.append(draw_means)
+
+    mean_curve = np.mean(all_means, axis=0)
+    auc = float(np.trapz(mean_curve, fractions))
+    return CurveResult(
+        fractions=fractions,
+        mean_prediction=mean_curve,
+        auc=auc,
+        monotone=True,
+        max_violation=0.0,
+    )
+
+
 def _curve(
     predict: callable,
     X: np.ndarray,

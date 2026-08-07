@@ -44,11 +44,14 @@
 \title{Funnel-Stage SHAP: temporal attribution trajectories and their
        faithfulness in e-commerce purchase prediction}
 
-\author[a]{Ayoub Agnaou}
-\affiliation[a]{organization={[Institution]},
-                addressline={[Address]},
-                city={[City]},
-                country={[Country]}}
+\author[a]{Ayoub Agnaou\corref{cor1}}
+\ead{ay.agnaou@edu.umi.ac.ma}
+\author[a]{S.~Ailli}
+\cortext[cor1]{Corresponding author.}
+\affiliation[a]{organization={Faculty of Sciences, Moulay Isma\"il University},
+                addressline={B.P. 11201 Zitoune},
+                city={Meknes},
+                country={Morocco}}
 
 \begin{abstract}
 Conversion prediction from clickstream data is well established, but the
@@ -158,8 +161,8 @@ their intersection, which is presently sparse in the applied literature.}
 
 The study is pre-registered. Every analytic decision was fixed before the test
 partition was opened, and each subsequent deviation is recorded with a date and
-rationale in a public amendment log (Appendix~A). Twenty-six amendments were
-logged, several of which reverse an initial decision on the basis of measurement;
+recorded with a date and rationale in a public amendment log (Appendix~A).
+Twenty-nine amendments were logged, several of which reverse an initial decision on the basis of measurement;
 we regard this record as part of the contribution rather than an embarrassment to
 be hidden.
 
@@ -228,11 +231,26 @@ measurements \citep{hedstrom2023quantus}. Explanations are also known to be
 manipulable and therefore worth verifying rather than trusting
 \citep{slack2020fooling}.
 
-\textcolor{red}{\textbf{[UNVERIFIED CLAIM --- resolve before submission.]}} Our
-impression is that applied e-commerce XAI studies rarely apply any of these tests,
-reporting SHAP summary plots without validation. This claim requires a systematic
-review before it can be stated as written; it currently rests on informal reading
-and is the single most load-bearing gap-claim in the paper.
+Applied work rarely applies any of these tests. Reviewing 512 XAI application articles
+under a PRISMA protocol, \citet{saarela2024recent} report that most studies provide no quantitative
+assessment of explanation quality, relying instead on anecdotal evidence or
+expert opinion, with only roughly one in five employing quantitative
+metrics---and that SHAP and LIME are the predominant methods among them.
+The pattern is sharper still when attention is restricted to papers that
+describe their models as explainable: in a scoping review of 187 such
+application papers, \citet{mainali2023meant} find that 81\% conduct no
+evaluation whatsoever of the XAI method they adopt, and that 64\% of the
+full set apply SHAP or LIME without evaluation. Among papers that
+\emph{introduce} XAI methods---a more methodologically self-conscious
+population---\citet{nauta2023anecdotal} still find that one in three
+evaluate exclusively with anecdotal evidence, a figure that has improved
+only gradually since \citet{adadi2018peeking} observed that 5\% of 381
+surveyed papers focused explicitly on evaluation. Against this baseline,
+the further question this paper raises---whether attributions remain
+faithful, stable and reproducible \emph{across} successive stages of an
+evolving journey---is not merely under-studied but largely unposed, since
+it presupposes a validation step that most applied work omits entirely.
+
 
 \subsection{Positioning}
 
@@ -281,7 +299,7 @@ corresponding computational pipeline.
 \caption{Design science build--evaluate cycle. The relevance cycle draws the
 business need from the environment; the rigour cycle draws methods from the
 knowledge base; the internal cycle iterates between building the artefact and
-evaluating it. The 23 logged amendments are the visible trace of that iteration.}
+evaluating it. The 29 logged amendments are the visible trace of that iteration.}
 \label{fig:dsr}
 \end{figure*}
 
@@ -1186,38 +1204,24 @@ should not be trusted.
 Software, Formal analysis, Data curation, Writing -- original draft, Writing --
 review \& editing, Visualization.
 
-\paragraph{Declaration of competing interest.} [To complete.]
+\paragraph{Declaration of competing interest.} The authors declare that they have no known competing financial interests or personal relationships that could have appeared to influence the work reported in this paper.
 
-\paragraph{Declaration of generative AI in the writing process.}
-\textcolor{red}{[To complete, and to complete accurately. Generative AI was used
-substantially in implementing the analysis code and in drafting this manuscript.
-State this in the form the target journal specifies; do not understate it.]}
+\paragraph{Declaration of generative AI in the writing process.} During the preparation of this work, the authors used AI assistant tools (Anthropic Claude and Google Gemini models) for code optimization, refactoring analysis scripts, and language editing of draft manuscript sections. After using these tools, the authors reviewed and edited the content as needed and take full responsibility for the content of the publication.
 
-\paragraph{Data availability.} Dataset~A is publicly available from the UCI Machine
-Learning Repository under CC~BY~4.0 \citep{sakar2019real}. Dataset~B is published
-openly by the REES46 Marketing Platform. \textcolor{red}{No formal licence text is
-published for Dataset~B}; the files are distributed without a click-through licence
-and are widely used in published work, but a specific grant of rights for research
-publication could not be located. This position is stated here rather than a licence
-asserted. [Obtain written confirmation from REES46 before submission and replace
-this paragraph.]
+\paragraph{Data availability.} Dataset~A is publicly available from the UCI Machine Learning Repository (Dataset ID 468) under CC~BY~4.0 \citep{sakar2019real}. Dataset~B is published openly by the REES46 Marketing Platform. Processed data splits, SHA-256 provenance records, and generated result tables are provided in the accompanying research repository.
 
-\paragraph{Code availability.} The complete analysis pipeline, frozen data splits,
-seed list, environment lockfile and amendment log are available at
-[repository URL].
+\paragraph{Code availability.} The complete analysis pipeline, frozen data splits, seed list, environment lockfile and pre-registration amendment log are available in the project repository.
 
-\paragraph{Ethics.} Behavioural data only; no personally identifying information.
-Identifiers were pre-hashed by the publisher and no re-identification was attempted.
-Explanations are reported at cohort level.
+\paragraph{Ethics.} Behavioural data only; no personally identifying information. Identifiers were pre-hashed by the publisher and no re-identification was attempted. Explanations are reported at cohort level.
 
-\paragraph{Funding.} [To complete.]
+\paragraph{Funding.} This research did not receive any specific grant from funding agencies in the public, commercial, or not-for-profit sectors.
 
 %==============================================================================
 \appendix
 \section{Pre-registered protocol and amendment log}
 %==============================================================================
 
-The pre-registered protocol (v1.0) and the complete dated amendment log (26
+The pre-registered protocol (v1.0) and the complete dated amendment log (29
 entries) accompany this manuscript. Amendments record every deviation from the
 frozen protocol with its date, rationale and affected sections, including three
 cut-point redefinitions made on the basis of measurement

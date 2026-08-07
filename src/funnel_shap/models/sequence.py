@@ -15,6 +15,13 @@ Sequences are right-padded and a mask is carried, rather than left-padded: the
 prefix's *final* events are the ones nearest the decision point, and keeping
 them at fixed positions from the start makes the per-timestep attributions that
 TimeSHAP produces directly comparable across sessions of different length.
+
+**Amendment A30 (2026-08-07): convergence training.**  The original 8-epoch
+fixed-duration training was replaced with early stopping on validation PR-AUC
+(patience=10), a cosine-annealing LR schedule, gradient clipping, and support
+for stacked GRU layers with inter-layer dropout. This ensures a fair
+cross-paradigm comparison (revision A.1) by training the GRU to convergence
+rather than for an arbitrary fixed duration.
 """
 
 from __future__ import annotations
@@ -121,9 +128,17 @@ def build_sequences(
     )
 
 
-def build_gru(n_features: int, *, hidden: int = 48, seed: int = 42):
-    """A small GRU classifier with the forward signature TimeSHAP expects.
+def build_gru(
+    n_features: int,
+    *,
+    hidden: int = 128,
+    num_layers: int = 2,
+    dropout: float = 0.2,
+    seed: int = 42,
+):
+    """A GRU classifier with the forward signature TimeSHAP expects.
 
+    Supports stacked layers with inter-layer dropout (amendment A30).
     TimeSHAP calls the model with a numpy array of shape
     ``(batch, timesteps, features)`` and expects ``(batch, 1)`` scores back, so
     the wrapper is part of the contract rather than a convenience.
@@ -136,8 +151,18 @@ def build_gru(n_features: int, *, hidden: int = 48, seed: int = 42):
     class GRUClassifier(nn.Module):
         def __init__(self) -> None:
             super().__init__()
-            self.gru = nn.GRU(n_features, hidden, batch_first=True)
-            self.head = nn.Sequential(nn.Linear(hidden, 1), nn.Sigmoid())
+            self.gru = nn.GRU(
+                n_features,
+                hidden,
+                num_layers=num_layers,
+                batch_first=True,
+                dropout=dropout if num_layers > 1 else 0.0,
+            )
+            self.head = nn.Sequential(
+                nn.Dropout(dropout),
+                nn.Linear(hidden, 1),
+                nn.Sigmoid(),
+            )
 
         def forward(self, x):
             if not torch.is_tensor(x):
@@ -154,12 +179,28 @@ def train_gru(
     val_idx: np.ndarray,
     *,
     seed: int = 42,
-    epochs: int = 8,
+    epochs: int = 80,
+    patience: int = 10,
     batch_size: int = 512,
     learning_rate: float = 1e-3,
-    hidden: int = 48,
+    hidden: int = 128,
+    num_layers: int = 2,
+    dropout: float = 0.2,
+    grad_clip: float = 1.0,
 ):
-    """Train with class-weighted BCE, selecting the epoch by validation PR-AUC.
+    """Train with class-weighted BCE, early stopping on validation PR-AUC.
+
+    Amendment A30: convergence training replaces the original fixed 8-epoch run.
+
+    - **Early stopping** with configurable patience on validation PR-AUC
+      ensures the model trains until improvement plateaus rather than for an
+      arbitrary duration. The best checkpoint is restored at the end.
+    - **Cosine annealing** LR schedule prevents the learning rate from
+      being too aggressive in later epochs as the model approaches convergence.
+    - **Gradient clipping** stabilises training on long sequences where
+      gradients through many timesteps can accumulate.
+    - **Stacked GRU layers with dropout** give the model enough capacity to
+      match the tree baseline while regularising against overfitting.
 
     Class weighting rather than resampling: Sec. 9.4 permits either, and
     reweighting the loss avoids synthesising event sequences, which SMOTE would
@@ -172,8 +213,17 @@ def train_gru(
     torch.manual_seed(seed)
     np.random.seed(seed)
 
-    model = build_gru(batch.X.shape[2], hidden=hidden, seed=seed)
+    model = build_gru(
+        batch.X.shape[2],
+        hidden=hidden,
+        num_layers=num_layers,
+        dropout=dropout,
+        seed=seed,
+    )
     optimiser = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimiser, T_max=epochs, eta_min=learning_rate * 0.01
+    )
 
     y_train = batch.y[train_idx].astype(np.float32)
     pos_weight = float((len(y_train) - y_train.sum()) / max(y_train.sum(), 1.0))
@@ -185,7 +235,9 @@ def train_gru(
     y_val = batch.y[val_idx]
 
     best_state, best_score = None, -np.inf
-    for _ in range(epochs):
+    epochs_without_improvement = 0
+
+    for epoch in range(epochs):
         model.train()
         order = np.random.permutation(len(train_idx))
         for start in range(0, len(order), batch_size):
@@ -196,15 +248,25 @@ def train_gru(
             weights = torch.where(target > 0, pos_weight, 1.0)
             loss = (loss_fn(predicted, target) * weights).mean()
             loss.backward()
+            # Gradient clipping prevents exploding gradients on long sequences.
+            torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
             optimiser.step()
+
+        scheduler.step()
 
         model.eval()
         with torch.no_grad():
             scores = model(X_val).squeeze(1).numpy()
         score = float(average_precision_score(y_val, scores))
+
         if score > best_score:
             best_score = score
             best_state = {k: v.clone() for k, v in model.state_dict().items()}
+            epochs_without_improvement = 0
+        else:
+            epochs_without_improvement += 1
+            if epochs_without_improvement >= patience:
+                break
 
     if best_state is not None:
         model.load_state_dict(best_state)

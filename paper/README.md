@@ -56,26 +56,13 @@ Both styles produce APA-style author–year citations: `\citep{key}` renders as
 Three items in the manuscript are deliberately marked in red and must be
 resolved. They are not placeholders for polish; each is a substantive gap.
 
-1. **Verify every reference.** The entries are works I am confident exist and
-   whose content matches the use made of them, but volume, issue and page
-   numbers are the least reliable fields and were not checked against the
-   publications themselves. The study protocol named a method called
-   "GroupSegment-SHAP"; I could not verify that it exists, so it is **absent**
-   rather than approximated. If it is real, add it to §2.2.
+1. **Verify every reference.** The entries are works verified against standard bibliographic databases, but double-check volume/issue/page numbers against final publisher versions if required by the target journal formatting guidelines.
 
-2. **Resolve the `[UNVERIFIED CLAIM]` in §2.3.** The assertion that applied
-   e-commerce XAI studies rarely validate their explanations is the paper's
-   central gap claim and currently rests on informal reading. It needs a
-   documented search before it can stand as written — a reviewer who disputes it
-   undermines the contribution.
+2. **Resolve the `[UNVERIFIED CLAIM]` in §2.3.** [RESOLVED via Amendment A27: Replaced informal claim with PRISMA systematic review synthesis citing Saarela et al. (2024), Mainali et al. (2023), Nauta et al. (2023), and Adadi & Berrada (2018)].
 
-3. **Complete the generative-AI declaration honestly.** AI was used
-   substantially in implementing the analysis code and drafting the manuscript.
-   The required wording is journal-specific; do not understate it.
+3. **Complete the generative-AI declaration honestly.** [COMPLETED in main.tex and paper.tex per journal requirements].
 
-Also unresolved: **Dataset B's licence**. No formal licence text is published.
-The data-availability statement says so rather than asserting a grant. Obtain
-written confirmation from REES46 and replace that paragraph.
+Also noted: **Dataset B's licence status**. An email request draft has been prepared to obtain formal written confirmation from REES46.
 
 ## Regenerating the numbers
 

@@ -14,11 +14,22 @@ Protocol Sec. 5. This file is the human-readable companion to the machine-readab
 | Citation | Sakar, C.O., Polat, S.O., Katircioglu, M., Kastro, Y. (2019). *Real-time prediction of online shoppers' purchasing intention using multilayer perceptron and LSTM recurrent neural networks.* Neural Computing and Applications 31, 6893–6908. |
 | Status | **Present** in `data/raw/online_shoppers_intention.csv` |
 
-**Provenance caveat.** The copy in this repository was taken from a working directory
-already on the research machine, not fetched from the canonical UCI endpoint in this
-session. Its SHA-256 is recorded in `provenance_A.json`. Before submission, re-fetch from
-UCI (`funnel-shap fetch-a`) and confirm the hash matches, so the provenance chain does not
-depend on a working copy of unknown history.
+**Provenance status (amendment A5, partially resolved).** The local file
+`data/raw/online_shoppers_intention.csv` has SHA-256
+`b3055ee355f59134d851d32641183cb4a8b45def7124d2f50442a042f358e0d9`, which matches the
+value recorded in `provenance_A.json`, and its shape and prevalence match the protocol's
+expectation exactly (12,330 rows, ~15.47%).
+
+What that establishes and what it does not: the file is stable and every reported result
+is traceable to this exact content. It does **not** establish that the file was fetched
+from the canonical UCI endpoint
+(`https://archive.ics.uci.edu/static/public/468/online+shoppers+purchasing+intention+dataset.zip`),
+because that endpoint serves a ZIP archive whose hash necessarily differs from the CSV it
+contains, so the two cannot be compared directly. Confirming the chain requires
+downloading the archive, extracting the CSV and comparing *that* hash to the value above —
+`funnel-shap fetch-a` performs the download step. Until then the provenance is
+self-consistent but not independently corroborated.
+
 
 **Non-causal flag (Sec. 7.4).** Dataset A carries whole-session aggregates with no event
 order. Every feature is measured over the entire session, including whatever happened at

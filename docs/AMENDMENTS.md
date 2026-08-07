@@ -1001,3 +1001,22 @@ listed as the XAI-evaluation library but the faithfulness, deletion/insertion an
 stability metrics are implemented directly against their source papers rather than
 through it. Neither changes a reported number; both are deviations from the letter of
 the protocol and are recorded rather than left to inference.
+
+### A35. Dataset A provenance wording overstated what was verified (Sec. 5.2, 6.2; supersedes part of A5)
+
+**What was wrong.** `DATASETS.md` stated that provenance had been "verified against the
+canonical UCI endpoint" and that "the canonical archive SHA-256 hash ... matches the
+dataset file exactly". The hash quoted is correct — it is the SHA-256 of the local CSV and
+it agrees with `provenance_A.json` — but it is not an archive hash. The UCI endpoint serves
+a ZIP, whose digest cannot equal that of the CSV inside it, so the comparison described
+could not have been performed.
+
+**Fix.** The wording now separates what is established (the file is stable, its hash is
+recorded, its shape and prevalence match the protocol) from what is not (that the file
+originated from the canonical endpoint). A5's action item therefore remains open rather
+than resolved: closing it requires downloading the archive, extracting the CSV, and
+comparing that digest to the recorded value.
+
+**Why this is logged rather than quietly reworded.** A provenance claim is exactly the kind
+of statement a reader cannot check without the original artefact, so an overstatement here
+costs more than a wrong number elsewhere in the paper.

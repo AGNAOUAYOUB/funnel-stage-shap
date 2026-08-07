@@ -72,6 +72,16 @@ SEARCH_SPACES: dict[str, dict[str, Callable[[Any], Any]]] = {
     "logreg": {
         "C": lambda t: t.suggest_float("C", 1e-3, 1e2, log=True),
     },
+    # Amendment A30: GRU search space for cross-paradigm convergence training.
+    # Kept deliberately compact — the GRU exists for attribution comparison, not
+    # to beat the tree models, but it must train to convergence for a fair test.
+    "gru": {
+        "hidden": lambda t: t.suggest_categorical("hidden", [64, 128, 192, 256]),
+        "num_layers": lambda t: t.suggest_int("num_layers", 1, 3),
+        "dropout": lambda t: t.suggest_float("dropout", 0.0, 0.5, step=0.05),
+        "learning_rate": lambda t: t.suggest_float("learning_rate", 1e-4, 5e-3, log=True),
+        "batch_size": lambda t: t.suggest_categorical("batch_size", [256, 512, 1024]),
+    },
 }
 
 
@@ -183,3 +193,58 @@ def _result_from_study(study, *, model_type: str, stage: str, seed: int) -> Tuni
         seed=seed,
         study_name=study.study_name,
     )
+
+
+def tune_gru(
+    batch,
+    train_idx: np.ndarray,
+    val_idx: np.ndarray,
+    *,
+    stage: str = "S1",
+    n_trials: int = 30,
+    seed: int = 42,
+    epochs: int = 80,
+    patience: int = 10,
+    storage_dir: Path = OPTUNA,
+) -> TuningResult:
+    """Optuna search over the GRU search space (amendment A30).
+
+    Uses the same TPE sampler and SQLite persistence as the tabular tuner.
+    Trial count is lower (30 vs 100) because each GRU trial is much slower
+    than a tree fit; 30 trials suffice for the compact 5-parameter space.
+    """
+    import optuna
+
+    from .sequence import predict_sequences, train_gru
+
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
+    space = SEARCH_SPACES["gru"]
+    set_global_seed(seed)
+
+    def objective(trial) -> float:
+        params = {name: fn(trial) for name, fn in space.items()}
+        _, val_score = train_gru(
+            batch,
+            train_idx,
+            val_idx,
+            seed=seed,
+            epochs=epochs,
+            patience=patience,
+            batch_size=params.pop("batch_size"),
+            learning_rate=params.pop("learning_rate"),
+            **params,
+        )
+        return val_score
+
+    storage_dir.mkdir(parents=True, exist_ok=True)
+    study_name = f"{stage}_gru_seed{seed}"
+    study = optuna.create_study(
+        study_name=study_name,
+        direction="maximize",
+        sampler=optuna.samplers.TPESampler(seed=seed),
+        storage=f"sqlite:///{(storage_dir / f'{study_name}.db').as_posix()}",
+        load_if_exists=True,
+    )
+    study.optimize(objective, n_trials=n_trials, show_progress_bar=True)
+
+    return _result_from_study(study, model_type="gru", stage=stage, seed=seed)

@@ -30,9 +30,40 @@ from sklearn.metrics import (
 
 from ..stats.bootstrap import BootstrapResult, bootstrap_ci_multi
 
+def normalised_pr_gain(y_true: np.ndarray, y_score: np.ndarray) -> float:
+    """Normalised PR-Gain: (PR-AUC - pi) / (1 - pi).
+
+    Standardises PR-AUC against chance prevalence pi, bounded in [0, 1] for
+    models above chance. Solves the varying-prevalence lift ceiling paradox.
+    """
+    y_true = np.asarray(y_true).ravel()
+    pi = float(y_true.mean())
+    if pi >= 1.0 or pi <= 0.0:
+        return 0.0
+    pr_auc = float(average_precision_score(y_true, y_score))
+    return float((pr_auc - pi) / (1.0 - pi))
+
+
+def pr_lift(y_true: np.ndarray, y_score: np.ndarray) -> float:
+    """PR-AUC Lift over chance prevalence: PR-AUC / pi."""
+    y_true = np.asarray(y_true).ravel()
+    pi = float(y_true.mean())
+    if pi <= 0.0:
+        return 0.0
+    pr_auc = float(average_precision_score(y_true, y_score))
+    return float(pr_auc / pi)
+
+
+def fraction_attainable_lift(y_true: np.ndarray, y_score: np.ndarray) -> float:
+    """Fraction of Attainable Lift: (Lift - 1) / (Max Lift - 1) = PR-Gain."""
+    return normalised_pr_gain(y_true, y_score)
+
+
 #: Threshold-free metrics, safe to bootstrap directly on scores.
 METRIC_FUNCTIONS: dict[str, Callable[[np.ndarray, np.ndarray], float]] = {
     "pr_auc": average_precision_score,
+    "pr_gain": normalised_pr_gain,
+    "pr_lift": pr_lift,
     "roc_auc": roc_auc_score,
     "brier": brier_score_loss,
 }
@@ -221,8 +252,13 @@ def evaluate_predictions(
     y_prob = np.asarray(y_prob).ravel().astype(float)
     pred = (y_prob >= threshold).astype(int)
 
+    prev = float(y_true.mean())
+    pr_auc_val = float(average_precision_score(y_true, y_prob))
     point = {
-        "pr_auc": float(average_precision_score(y_true, y_prob)),
+        "pr_auc": pr_auc_val,
+        "pr_gain": float((pr_auc_val - prev) / (1.0 - prev)) if (0.0 < prev < 1.0) else 0.0,
+        "pr_lift": float(pr_auc_val / prev) if prev > 0.0 else 0.0,
+        "attainable_lift_fraction": float((pr_auc_val - prev) / (1.0 - prev)) if (0.0 < prev < 1.0) else 0.0,
         "roc_auc": float(roc_auc_score(y_true, y_prob)),
         "f1": float(f1_score(y_true, pred, zero_division=0)),
         "precision": float(precision_score(y_true, pred, zero_division=0)),

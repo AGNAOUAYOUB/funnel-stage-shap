@@ -218,8 +218,11 @@ def improvement_curve(runs: list[StageRun], *, feature_set: str = "full") -> pl.
             pl.first("prevalence").alias("prevalence"),
             pl.col("pr_auc").mean().alias("pr_auc_mean"),
             pl.col("pr_auc").std().alias("pr_auc_std"),
+            pl.col("pr_gain").mean().alias("pr_gain_mean"),
+            pl.col("pr_gain").std().alias("pr_gain_std"),
             pl.col("pr_auc_lift").mean().alias("pr_auc_lift_mean"),
             pl.col("roc_auc").mean().alias("roc_auc_mean"),
+            pl.col("roc_auc").std().alias("roc_auc_std"),
             pl.col("ece").mean().alias("ece_mean"),
             pl.len().alias("n_seeds"),
         )

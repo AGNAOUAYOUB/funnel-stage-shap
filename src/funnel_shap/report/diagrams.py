@@ -383,7 +383,7 @@ def diagram_dsr(directory: Path = FIGURES) -> list[Path]:
     _arrow(ax, (58, 48), (58, 60), color=ORANGE, lw=1.6, rad=0.32)
     ax.text(50, 54, "refine", ha="center", fontsize=7.4, color=ORANGE,
             style="italic", weight="bold")
-    ax.text(50, 21.5, "23 logged amendments\n(3 cut-point redefinitions, 2 retractions)",
+    ax.text(50, 21.5, "29 logged amendments\n(3 cut-point redefinitions, 1 reversal, 1 withdrawal)",
             ha="center", fontsize=6.9, color=GREY, linespacing=1.35)
 
     _box(ax, 74.5, 62, 21, 20,

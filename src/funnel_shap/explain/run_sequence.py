@@ -54,7 +54,11 @@ def run_sequence_arm(
     protocol: str = "temporal",
     seed: int = 42,
     max_len: int = 32,
-    epochs: int = 6,
+    epochs: int = 80,
+    patience: int = 10,
+    hidden: int = 128,
+    num_layers: int = 2,
+    dropout: float = 0.2,
     max_sessions: int = 60_000,
     n_explain: int = 150,
     use_timeshap: bool | None = None,
@@ -98,7 +102,9 @@ def run_sequence_arm(
             continue
 
         model, val_score = train_gru(
-            batch, idx["train"], idx["val"], seed=seed, epochs=epochs
+            batch, idx["train"], idx["val"], seed=seed, epochs=epochs,
+            patience=patience, hidden=hidden, num_layers=num_layers,
+            dropout=dropout,
         )
         test_scores = predict_sequences(model, batch.X[idx["test"]])
         test_score = float(average_precision_score(batch.y[idx["test"]], test_scores))
