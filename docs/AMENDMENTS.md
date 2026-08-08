@@ -1020,3 +1020,56 @@ comparing that digest to the recorded value.
 **Why this is logged rather than quietly reworded.** A provenance claim is exactly the kind
 of statement a reader cannot check without the original artefact, so an overstatement here
 costs more than a wrong number elsewhere in the paper.
+
+### A36. Appendix exhibits added; single-seed provenance stated (Sec. 15)
+
+**Decision.** A full appendix figure and table set was generated: ROC, precision-recall
+and confusion diagnostics; SHAP summary, dependence and ungrouped importance; the Dataset A
+model-family comparison and the ablation ladder; four schematics (research workflow,
+training pipeline, SHAP workflow, model architecture); and supporting tables for
+hyperparameters, computational cost and literature positioning.
+
+**Seed provenance.** Curve and instance-level diagnostics are drawn from one fitted model
+at seed 42, the protocol's configuration-template default (Appendix A of the protocol).
+This is stated in every caption. An ROC curve or beeswarm pooled over five seeds is not a
+well-defined object, and averaging them would misrepresent both shape and spread; the
+headline numbers these plots sit beside remain five-seed means. Figures that do aggregate
+over seeds -- ungrouped feature importance and the ablation ladder -- say so.
+
+**Computational cost is measured, not estimated.** Only the appendix run was instrumented
+(`runtime_appendix.csv`: stage fit 332s, TreeSHAP over three stages 761s). Every other
+pipeline step is reported as *not measured* rather than given a plausible figure. A
+runtime a reader might plan against must be observed, not inferred.
+
+**Two layout defects were caught by inspecting the rendered output**, not by the tests:
+the SHAP summary panels overprinted their neighbours' data with axis labels, and the
+precision-recall chance annotations for S1 and S2 collided (their prevalences differ by
+0.014). Both are fixed; the chance levels now appear in the legend. Rendered figures are
+checked visually because a test can confirm a file exists and still not notice it is
+unreadable.
+
+**Reuse cache.** `appendix --reuse` redraws from a persisted cache of scores and SHAP
+values, so layout iteration does not require the ~18-minute refit-and-explain cycle.
+
+### A37. A figure redraw destroyed the only measured runtimes (Sec. 15)
+
+**What happened.** `appendix --reuse` redraws figures from a cached copy of the fitted
+scores and SHAP values, so it measures nothing. It nevertheless wrote its (empty) timing
+list to `runtime_appendix.csv`, overwriting the measurements from the run that produced the
+cache. The next call to the cost table then failed outright on the empty file.
+
+**Why it matters more than a crash.** The crash was the good outcome: it made the loss
+visible. Had the cost table tolerated an empty file quietly, the appendix would have
+reported every step as "not measured" and the two genuine observations would have vanished
+without a trace. A destructive write that also silences its own evidence is the failure
+mode worth guarding against.
+
+**Fix.** The timing file is written only when something was actually timed, and the cost
+table now treats an empty or malformed runtime file as an absent measurement rather than an
+error. Two regression tests cover both paths.
+
+**Recovery.** The destroyed values were recovered from the run log recorded earlier in the
+same session -- `appendix-stage-fit` 332.39s, `appendix-shap` 761.06s -- and correspond to
+the run that produced the cache still on disk. They are restored observations, not
+re-estimates; had no record survived, the correct action would have been to re-run the
+timed command rather than reconstruct a plausible figure.

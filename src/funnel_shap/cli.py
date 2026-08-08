@@ -8,13 +8,44 @@ from __future__ import annotations
 
 import contextlib
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
 import polars as pl
 import typer
 
 from . import paths
 from .config import load_config
+
+
+@dataclass
+class _CachedAttribution:
+    """Minimal stand-in for StageAttribution when redrawing from cache.
+
+    Only the fields the appendix figures read are carried, so a cached redraw
+    cannot accidentally depend on state that was not persisted.
+    """
+
+    feature_names: list
+    shap_values: np.ndarray
+
+    def global_importance(self) -> pl.DataFrame:
+        mean_abs = np.abs(self.shap_values).mean(axis=0)
+        total = mean_abs.sum()
+        return pl.DataFrame(
+            {
+                "feature": list(self.feature_names),
+                "mean_abs_shap": mean_abs,
+                "share": mean_abs / total if total else mean_abs,
+            }
+        ).sort("mean_abs_shap", descending=True)
+
+
+@dataclass
+class _CachedExplanation:
+    attribution: _CachedAttribution
+    explained_matrix: np.ndarray
 
 # Polars renders tables with box-drawing characters, which a Windows console
 # defaulting to cp1252 cannot encode -- the run completes and then dies on the
@@ -1057,6 +1088,165 @@ def check_config(path: Path) -> None:
     typer.secho(f"OK  {config.name}", fg=typer.colors.GREEN)
     typer.echo(f"config_hash: {config.config_hash}")
     typer.echo(f"git_commit:  {config.git_commit}")
+
+
+@app.command()
+def appendix(
+    suffix: str = _SUFFIX_OPT,
+    protocol: str = "temporal",
+    model: str = "lightgbm",
+    seed: int = 42,
+    max_explain: int = 3000,
+    background_size: int = 500,
+    reuse: bool = typer.Option(
+        False, help="Redraw from cached scores/SHAP instead of refitting (layout work)"
+    ),
+) -> None:
+    """Build the appendix figure and table set (Sec. 15 deliverables).
+
+    Diagnostic plots (ROC, PR, confusion, SHAP) are drawn at a single seed
+    because a pooled beeswarm or ROC curve is not a well-defined object; the
+    headline metrics they sit beside remain five-seed means. Runtimes are
+    measured here and written to `runtime_appendix.csv` so the computational
+    cost table reports observations rather than estimates.
+    """
+    paths.ensure_dirs()
+
+    import time
+
+    from .data.journey import MODELLING_STAGES
+    from .explain.run_stage_shap import explain_stages
+    from .models.run_stages import run_stage_models
+    from .report import appendix as apx
+    from .report import appendix_diagrams, appendix_tables
+
+    features = {}
+    for stage in MODELLING_STAGES:
+        path = paths.PROCESSED / f"features_{suffix}_{stage}.parquet"
+        if path.exists():
+            features[stage] = pl.read_parquet(path)
+    if not features:
+        raise typer.BadParameter(f"no feature matrices for suffix {suffix!r}")
+
+    timings: list[dict] = []
+    written: dict[str, list] = {}
+
+    # Cache of the expensive inputs. Refitting and re-explaining costs roughly
+    # seventeen minutes on this dataset while redrawing a figure costs seconds,
+    # and layout work needs many redraws.
+    cache = paths.INTERIM / f"appendix_cache_{suffix}_seed{seed}.npz"
+
+    if reuse:
+        if not cache.exists():
+            raise typer.BadParameter(f"no cache at {cache}; run once without --reuse")
+        blob = np.load(cache, allow_pickle=True)
+        stage_names = [str(s) for s in blob["stages"]]
+        scores = {s: (blob[f"y_{s}"], blob[f"p_{s}"]) for s in stage_names}
+        thresholds = dict(zip(stage_names, blob["thresholds"], strict=True))
+        explanations = {
+            s: _CachedExplanation(
+                _CachedAttribution([str(n) for n in blob[f"names_{s}"]], blob[f"shap_{s}"]),
+                blob[f"matrix_{s}"],
+            )
+            for s in stage_names
+            if f"shap_{s}" in blob
+        }
+        typer.echo(f"redrawing from {cache.name}")
+    else:
+        typer.echo(f"fitting stage models at seed {seed} for diagnostics ...")
+        start = time.perf_counter()
+        # The protocol floors bootstrap resamples at 2000 (Sec. 4.2). These
+        # diagnostics do not use the intervals, but the floor is a protocol
+        # invariant and is respected rather than bypassed.
+        runs = run_stage_models(
+            features, suffix=suffix, protocol=protocol,
+            models=(model,), seeds=(seed,), feature_sets=("full",), n_resamples=2000,
+        )
+        timings.append(
+            {"command": "appendix-stage-fit", "seconds": time.perf_counter() - start}
+        )
+        if not runs:
+            raise typer.BadParameter("no stage produced an evaluable model")
+
+        scores = {r.stage: (r.y_test, r.test_scores) for r in runs}
+        thresholds = {r.stage: r.threshold for r in runs}
+
+        typer.echo("computing stage attributions ...")
+        start = time.perf_counter()
+        explanations = explain_stages(
+            features, suffix=suffix, protocol=protocol, model_type=model,
+            seed=seed, max_explain=max_explain, background_size=background_size,
+        )
+        timings.append(
+            {"command": "appendix-shap", "seconds": time.perf_counter() - start}
+        )
+
+        payload: dict = {
+            "stages": np.array(list(scores)),
+            "thresholds": np.array([thresholds[s] for s in scores]),
+        }
+        for stage, (y_true, y_score) in scores.items():
+            payload[f"y_{stage}"] = np.asarray(y_true)
+            payload[f"p_{stage}"] = np.asarray(y_score)
+        for stage, explanation in explanations.items():
+            payload[f"shap_{stage}"] = np.asarray(explanation.attribution.shap_values)
+            payload[f"matrix_{stage}"] = np.asarray(explanation.explained_matrix)
+            payload[f"names_{stage}"] = np.array(
+                list(explanation.attribution.feature_names)
+            )
+        np.savez_compressed(cache, **payload)
+        typer.echo(f"cached inputs -> {cache.name}")
+
+    written["figA1"] = apx.figure_roc_curves(scores)
+    written["figA2"] = apx.figure_pr_curves(scores)
+    written["figA3"] = apx.figure_confusion_matrices(scores, thresholds)
+
+    if explanations:
+        written["figA4"] = apx.figure_shap_summary(explanations)
+        written["figA5"] = apx.figure_shap_dependence(explanations)
+        written["figA6"] = apx.figure_feature_importance(explanations)
+
+    baselines = paths.TABLES / "dataset_a_baselines_summary.csv"
+    if baselines.exists():
+        written["figA7"] = apx.figure_performance_comparison(pl.read_csv(baselines))
+    else:
+        typer.secho("no Dataset A summary; skipping Figure A7", fg=typer.colors.YELLOW)
+
+    ablation_path = paths.TABLES / f"ablation_{suffix}.csv"
+    if ablation_path.exists():
+        written["figA8"] = apx.figure_ablation(pl.read_csv(ablation_path))
+    else:
+        typer.secho("no ablation table; skipping Figure A8", fg=typer.colors.YELLOW)
+
+    written.update(appendix_diagrams.build_all())
+
+    # Only write timings when something was actually timed. A redraw measures
+    # nothing, and writing an empty frame here would overwrite the real
+    # measurements from the run that produced the cache -- destroying the only
+    # observed runtimes in the project.
+    if timings:
+        pl.DataFrame(timings).write_csv(paths.TABLES / "runtime_appendix.csv")
+
+    prevalence_path = paths.TABLES / f"stage_prevalence_{suffix}.csv"
+    if prevalence_path.exists():
+        appendix_tables.dataset_statistics_table(prevalence_path).write_csv(
+            paths.TABLES / f"appendix_dataset_statistics_{suffix}.csv"
+        )
+    appendix_tables.environment_table().write_csv(
+        paths.TABLES / "appendix_environment.csv"
+    )
+    appendix_tables.computational_cost_table().write_csv(
+        paths.TABLES / "appendix_computational_cost.csv"
+    )
+    appendix_tables.literature_comparison_table().write_csv(
+        paths.TABLES / "appendix_literature_comparison.csv"
+    )
+
+    typer.echo("")
+    for name, files in sorted(written.items()):
+        typer.echo(f"{name}: " + ", ".join(p.name for p in files))
+    typer.echo(f"\nfigures -> {paths.FIGURES}")
+    typer.echo(f"tables  -> {paths.TABLES}")
 
 
 if __name__ == "__main__":

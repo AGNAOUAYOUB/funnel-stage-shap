@@ -240,6 +240,54 @@ stages:
       - reports/figures/fig5_reliability.pdf:
           cache: false
 
+  appendix:
+    # Run-sheet step 16 (appendix): diagnostic figures, schematics and the
+    # supporting tables. Diagnostics are drawn at a single seed; see the module
+    # docstring for why a pooled ROC or beeswarm is not a well-defined object.
+    cmd: python -m funnel_shap.cli appendix --suffix gap30s200000
+    deps:
+      - data/processed/features_gap30s200000_S1.parquet
+      - data/processed/features_gap30s200000_S2.parquet
+      - data/processed/features_gap30s200000_S3.parquet
+      - data/processed/splits/split_gap30s200000_temporal.parquet
+      - reports/tables/dataset_a_baselines_summary.csv
+      - reports/tables/ablation_gap30s200000.csv
+      - src/funnel_shap/report/appendix.py
+      - src/funnel_shap/report/appendix_diagrams.py
+      - src/funnel_shap/report/appendix_tables.py
+    outs:
+      - reports/figures/figA1_roc_curves.pdf:
+          cache: false
+      - reports/figures/figA2_pr_curves.pdf:
+          cache: false
+      - reports/figures/figA3_confusion_matrices.pdf:
+          cache: false
+      - reports/figures/figA4_shap_summary.pdf:
+          cache: false
+      - reports/figures/figA5_shap_dependence.pdf:
+          cache: false
+      - reports/figures/figA6_feature_importance.pdf:
+          cache: false
+      - reports/figures/figA7_performance_comparison.pdf:
+          cache: false
+      - reports/figures/figA8_ablation.pdf:
+          cache: false
+      - reports/figures/figA9_research_workflow.pdf:
+          cache: false
+      - reports/figures/figA10_training_pipeline.pdf:
+          cache: false
+      - reports/figures/figA11_shap_workflow.pdf:
+          cache: false
+      - reports/figures/figA12_model_architecture.pdf:
+          cache: false
+    metrics:
+      - reports/tables/runtime_appendix.csv:
+          cache: false
+      - reports/tables/appendix_computational_cost.csv:
+          cache: false
+      - reports/tables/appendix_literature_comparison.csv:
+          cache: false
+
   # Sensitivity arm for the Sec. 7.2 appendix. Not on the critical path.
   sessionize_sensitivity:
     foreach: [15, 60]
