@@ -99,18 +99,33 @@ clickstream analysis \sep design science research
 \label{sec:intro}
 %==============================================================================
 
-Every interaction a customer performs on an e-commerce platform---product
-searches, page views, category navigation, cart additions---leaves a
-behavioural trace, and organisations routinely exploit these traces to
-predict whether a browsing session will end in a purchase. The predictions
-are acted upon while the session is still unfolding: retargeting budget is
-allocated, on-site interventions are triggered, service contacts are
-prioritised. Decisions of this kind require reasons, not only scores. A model
-that ranks sessions accurately but cannot say \emph{why} offers little
-guidance about what to change \citep{rudin2019stop}, and the marketing
-literature has long described the online journey as a sequence of
+The decision this paper supports is a recurring operational one: while a
+customer is still browsing, and with only part of the session observed, an
+organisation must decide whether to intervene, how, and at what cost. Every
+interaction a customer performs on an e-commerce platform---product searches,
+page views, category navigation, cart additions---leaves a behavioural trace,
+and organisations routinely exploit these traces to rank sessions by
+conversion propensity. The rankings are acted upon while the session is still
+unfolding: retargeting budget is allocated, on-site interventions are
+triggered, service contacts are prioritised.
+
+A ranking, however, is not a decision. Choosing an intervention requires three
+things a propensity score does not supply. It requires a \emph{reason}: a
+model that ranks accurately but cannot say \emph{why} offers little guidance
+about what to change \citep{rudin2019stop}. It requires a \emph{time}: the
+marketing literature has long described the online journey as a sequence of
 qualitatively distinct phases rather than a single undifferentiated visit
-\citep{bucklin2003model, moe2003buying, lemon2016understanding}.
+\citep{bucklin2003model, moe2003buying, lemon2016understanding}, and a lever
+that works during comparison may be useless at checkout. And it requires a
+\emph{reference point}: a targeting rule is worth deploying only insofar as it
+beats acting on everyone, which is free. We show in
+Section~\ref{sec:decision-support} that this last requirement is not
+incidental --- at the cart stage, a model with an apparently strong PR-AUC of
+0.568 turns out to refer 99\% of sessions for intervention and to beat a
+blanket rule by 0.0008 $F_1$ points. Conventional predictive evaluation ranks
+that stage the strongest of the three; a decision-relevant evaluation ranks it
+the weakest. The gap between those two verdicts is the space this paper
+occupies.
 
 Shapley additive explanations \citep[SHAP;][]{lundberg2017unified}, together
 with their exact tree-model variant \citep{lundberg2020local}, have become
@@ -188,7 +203,7 @@ and the distinction is deliberate: the document was version-frozen and is
 distributed with the manuscript, but it was not deposited in a
 time-stamping registry, so readers should weight it as an auditable record
 of intent rather than as third-party-certified priority.
-Thirty-seven amendments were logged, several of which reverse an initial
+Thirty-eight amendments were logged, several of which reverse an initial
 decision on the basis of measurement; we regard this record as part of the
 contribution rather than an embarrassment to be hidden.
 
@@ -1388,6 +1403,184 @@ restores calibration.}
 \end{figure}
 
 %==============================================================================
+\section{Decision-support interpretation}
+\label{sec:decision-support}
+%==============================================================================
+
+The results so far are predictive and explanatory. This section converts them
+into decision-support terms, because a conversion model earns its place in an
+operational system not by ranking well but by changing what an organisation
+does. Figure~\ref{fig:decision-support} sets out the architecture the
+framework implies.
+
+\begin{figure*}[htbp]
+\centering
+\includegraphics[width=\textwidth]{fig9_decision_support.pdf}
+\caption{Decision-support architecture. Behavioural events are ordered into a
+sequential representation, truncated at the stage cut-point, scored, explained
+under the same truncation, interpreted at stage level, and only then converted
+into a decision to act or withhold. The dashed return path is not decorative:
+an intervention alters the behaviour from which the next prediction is
+computed, so the system is a loop rather than a pipeline. A purely predictive
+system terminates at the third box, yielding a score with no reason and no
+stage label, which is sufficient to rank customers and insufficient to choose
+a lever.}
+\label{fig:decision-support}
+\end{figure*}
+
+\subsection{Why prediction alone is not decision support here}
+\label{sec:why-not-prediction}
+
+The clearest evidence that ranking quality and decision value diverge comes
+from the operating points themselves. Table~\ref{tab:error} reports the
+confusion structure at each stage's validation-selected threshold, against the
+one comparator that matters operationally: the trivial rule that flags every
+session. That rule costs nothing to build, so a model earns its place only by
+beating it. Its $F_1$ is $2\pi_s/(1+\pi_s)$ at prevalence $\pi_s$.
+
+\begin{table*}[htbp]
+\centering
+\caption{Error structure at the operating threshold (seed 42, test partition)
+against the always-positive rule. \emph{Flag rate} is the share of sessions
+referred for intervention; \emph{FP per TP} is the false positives incurred
+per true positive. $F_1$ margin is the model's $F_1$ minus that of the trivial
+rule at the same prevalence. Source:
+\texttt{appendix\_error\_analysis\_gap30s200000.csv}.}
+\label{tab:error}
+\small
+\begin{tabular}{@{}lS[table-format=5.0]S[table-format=1.4]S[table-format=1.3]S[table-format=5.0]S[table-format=5.0]S[table-format=1.3]S[table-format=1.3]S[table-format=1.4]S[table-format=1.4]S[table-format=+1.4]S[table-format=2.2]@{}}
+\toprule
+\textbf{Stage} & {$N$} & {$\pi_s$} & {\textbf{Flag rate}} & {\textbf{TP}} &
+{\textbf{FP}} & {\textbf{Prec.}} & {\textbf{Rec.}} & {$F_1$} &
+{$F_1$ trivial} & {$F_1$ margin} & {\textbf{FP per TP}} \\
+\midrule
+S1 & 38059 & 0.0734 & 0.174 & 950  & 5693 & 0.143 & 0.340 & 0.2014 & 0.1367 & +0.0647 & 5.99 \\
+S2 & 17884 & 0.0589 & 0.243 & 398  & 3957 & 0.091 & 0.378 & 0.1472 & 0.1113 & +0.0359 & 9.94 \\
+S3 & 2973  & 0.5214 & 0.990 & 1542 & 1402 & 0.524 & 0.995 & 0.6862 & 0.6854 & +0.0008 & 0.91 \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+The S3 row is the study's sharpest decision-support finding, and it is
+negative. At its own selected operating point the intent-stage model refers
+99.0\% of sessions for intervention and achieves an $F_1$ of 0.6862 against
+0.6854 for a rule that refers everyone: a margin of 0.0008. Read as a
+targeting system, the model at the cart stage is operationally
+indistinguishable from a blanket policy. Its apparently strong PR-AUC of 0.568
+is very largely prevalence, and its high $F_1$ is an artefact of optimising a
+prevalence-sensitive criterion on a population that is already half
+purchasers.
+
+The early stages behave in the opposite way. S1 refers 17.4\% of sessions and
+beats the trivial rule by 0.0647 $F_1$ points; S2 refers 24.3\% and beats it
+by 0.0359. These are modest margins, and the cost side is real --- roughly six
+false positives per true positive at S1 and ten at S2 --- but they are
+\emph{selective}, which is the property a targeting system needs. The
+practical inversion is therefore stark. The stage at which conversion
+prediction is most commonly deployed is the stage at which it contributes
+least over a blanket rule; the stage at which the model is genuinely
+selective is the earliest one, where intervention is also least costly and
+most reversible.
+
+This is precisely the divergence that motivates a decision-support framing
+rather than a purely predictive one. Any of PR-AUC, $F_1$ or accuracy read in
+isolation would have ranked S3 the strongest stage. Only the comparison
+against a decision-relevant null exposes it as the weakest.
+
+\subsection{From explanation to intervention}
+\label{sec:explanation-to-intervention}
+
+Prediction identifies \emph{who}; the stage-conditioned attribution supplies
+\emph{why} and \emph{when}, which is what selects a lever.
+Table~\ref{tab:decision} traces each stage from its dominant predictive signal
+through to a candidate intervention and its attendant risk. Two cautions
+govern the table and are stated once here rather than repeated in every row.
+First, SHAP attributions describe the model's use of a feature, not a causal
+effect on purchasing; the interventions are hypotheses generated by the
+explanation, not effects estimated by it. Second, no intervention in this
+table has been tested --- the study is offline, and the column is a design
+implication, not evidence of efficacy.
+
+\begin{table*}[htbp]
+\centering
+\caption{Decision-support implications by funnel stage. Attribution shares are
+grouped mean $|$SHAP$|$ from Table~\ref{tab:migration}; predictive standing is
+from Tables~\ref{tab:stage-models} and~\ref{tab:error}. Interventions are
+hypotheses implied by the attribution structure and have not been tested in
+this study.}
+\label{tab:decision}
+\scriptsize
+\begin{tabular}{@{}p{1.3cm}p{2.5cm}p{3.1cm}p{3.1cm}p{2.9cm}p{2.6cm}@{}}
+\toprule
+\textbf{Stage} & \textbf{Dominant signal} & \textbf{Explanation} &
+\textbf{Decision implication} & \textbf{Candidate intervention} &
+\textbf{Decision risk} \\
+\midrule
+S1 \newline exploration &
+Price context (43.7\%), product views (19.2\%) &
+Price and browsing breadth carry most attribution; the model is selective
+(flag rate 0.174, $F_1$ margin $+0.065$) &
+This is where targeting adds most over a blanket rule, and where the
+explanation is most faithful ($\rho = 0.571$) &
+Assortment and price-transparency treatments; entry-point merchandising &
+$\approx$6 false positives per true positive; over-discounting visitors who
+would convert unaided \\
+\addlinespace
+S2 \newline consideration &
+Engagement/temporal (36.8\%), navigation entropy (22.4\%) &
+Comparison behaviour peaks here; navigation attribution triples from S1 and
+falls again by S3 &
+Comparison support is indicated at this stage specifically, and only a
+stage-conditioned analysis reveals it &
+Comparison aids, filtering and ranking help, category navigation support &
+$\approx$10 false positives per true positive; weakest faithfulness of the
+three stages ($\rho = 0.494$, below the pre-set 0.5) \\
+\addlinespace
+S3 \newline intent &
+Engagement (33.8\%), price returns (37.9\%) &
+Attribution is stable but predictive skill is near its floor
+(lift 1.09, ROC-AUC 0.570) &
+Propensity-based targeting is not defensible here: the operating point refers
+99\% of sessions &
+Blanket or margin-based rules rather than model-driven selection; reserve
+model capacity for earlier stages &
+Acting on predicted propensity at this stage is close to acting at random
+while incurring model-governance cost \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+Three implications follow that a whole-session analysis could not have
+produced. First, the navigation peak at consideration (3.5\%, 22.4\%, 7.4\%
+across stages) identifies a specific intervention window; a static attribution
+assigns this family a flat 11.1\% and would place the lever nowhere in
+particular. Second, the faithfulness profile is stage-dependent
+(Table~\ref{tab:quality}), so the confidence attached to an explanation should
+vary by stage: S2 is simultaneously the stage where the explanation points
+most clearly to a lever and the stage where the explanation is least faithful,
+which is an uncomfortable but actionable combination. Third, the near-zero
+per-instance agreement between the tree and recurrent arms
+(Section~\ref{sec:results-h4}) bears directly on interface design: a system
+that surfaces per-customer explanations to an analyst is making a claim that
+this evidence does not support, even though the same models agree at the
+population level.
+
+\subsection{What a deploying organisation should take from this}
+\label{sec:deployment}
+
+The framework's value is not that it improves conversion prediction --- it
+does not, and the tuning analysis shows the headline numbers are close to
+what default hyperparameters already achieve. Its value is that it makes
+visible three things a conventional pipeline hides: that predictive skill and
+prevalence move together and must be separated before a stage is judged; that
+attribution mass migrates, so the same model gives different advice at
+different points in the journey; and that explanation quality is itself a
+measurable property that varies by stage. An organisation adopting this
+framework should expect to conclude, as we do here, that some stages do not
+warrant model-driven targeting at all. That is a decision-support result, and
+a conventional evaluation would not have surfaced it.
+
+%==============================================================================
 \section{Discussion}
 \label{sec:discussion}
 %==============================================================================
@@ -1630,11 +1823,120 @@ During the preparation of this work, the authors used AI assistant tools (Anthro
 
 %==============================================================================
 \appendix
+\section{Protocol alignment}
+\label{app:alignment}
+%==============================================================================
+
+Table~\ref{tab:alignment} maps each element fixed in the pre-specified
+protocol (v1.0) to its implementation and records its status. The purpose is
+to let a reader establish, without reading the code, which parts of the study
+are confirmatory and which are not. Three categories appear. \emph{Unchanged}
+means implemented as specified. \emph{Deviation} means implemented
+differently, with the reason and the amendment number given. \emph{Exploratory}
+means the analysis was added after the protocol was fixed and is therefore not
+confirmatory evidence, however it reads.
+
+\begin{table*}[htbp]
+\centering
+\caption{Alignment between the pre-specified protocol (v1.0) and the
+manuscript. Amendment numbers refer to the log described in
+Appendix~\ref{app:amendments}.}
+\label{tab:alignment}
+\scriptsize
+\begin{tabular}{@{}p{3.0cm}p{2.5cm}p{5.4cm}p{3.4cm}@{}}
+\toprule
+\textbf{Protocol element} & \textbf{Manuscript section} &
+\textbf{Implementation} & \textbf{Status} \\
+\midrule
+Seed list $\{7,17,23,42,101\}$ (App.~B) & \S\ref{sec:methods-design} &
+All seeded procedures use exactly this list & Unchanged \\
+\addlinespace
+Primary metric PR-AUC; secondary ROC-AUC (\S11) & \S\ref{sec:methods-stats} &
+H1 is judged on PR-AUC; ROC-AUC reported alongside & Unchanged \\
+\addlinespace
+Stages S1--S4 (\S8.2) & \S\ref{sec:methods-journey} &
+S1--S3 modelled; S4 defined descriptively only & Deviation (A1): S4's
+cut-point is the purchase event, so any S4 prefix contains the label \\
+\addlinespace
+Stage cut-points (\S8.2) & \S\ref{sec:methods-journey} &
+S1 at second product interaction; S2 at second browsing signal &
+Deviation (A6, A8): the literal definitions produced one-event prefixes with
+19 of 23 features constant \\
+\addlinespace
+Prefix protocol (\S8.3) & \S\ref{sec:framework-prefixes} &
+Enforced at the representation level and unit-tested & Unchanged \\
+\addlinespace
+Temporal split primary, grouped robustness, 70/15/15 (\S8.4) &
+\S\ref{sec:methods-splits} & Both frozen to disk before modelling &
+Unchanged \\
+\addlinespace
+Optuna TPE with nested CV (\S10) & \S\ref{sec:methods-tuning} &
+TPE over a held-out validation set, 100 trials per stage &
+Deviation (A24): nested CV would shuffle folds across the temporal boundary,
+which is the leakage the split exists to prevent \\
+\addlinespace
+Hyperparameter tuning (\S10) & \S\ref{sec:results-sensitivity} &
+Headline models use library defaults; tuned models reported as a robustness
+arm & Deviation (A24): explanation layers were computed against the default
+models \\
+\addlinespace
+Calibration on a dedicated split (\S10) & \S\ref{sec:methods-prediction} &
+Isotonic, fitted on a 20\% slice of the training period &
+Deviation (A18): calibrating on validation inflates ECE roughly tenfold under
+the prior shift present here \\
+\addlinespace
+Baselines: LR, RF, XGBoost, LightGBM, CatBoost (\S10) &
+\S\ref{sec:results-performance} & All five evaluated on Dataset~A &
+Unchanged \\
+\addlinespace
+Sequence arm: GRU or Transformer (\S10) & \S\ref{sec:results-h4} &
+GRU on the same prefixes, explained with TimeSHAP & Unchanged \\
+\addlinespace
+Layers 1--3 explanation protocol (\S12) & \S\ref{sec:methods-explain} &
+TreeSHAP, TimeSHAP, and faithfulness/stability/consistency & Unchanged \\
+\addlinespace
+McNemar, DeLong, Wilcoxon, Holm (\S13) & \S\ref{sec:methods-stats} &
+DeLong, Wilcoxon and Holm used; bootstrap intervals carry the inference &
+Deviation (A34): McNemar was not exercised, as the confirmatory family
+compares threshold-free metrics \\
+\addlinespace
+MLflow and DVC (\S7) & Appendix~\ref{app:reproducibility} &
+Run logging implemented; pipeline specified but not executed end to end &
+Deviation (A28, A29) \\
+\addlinespace
+H1--H4 (\S2) & \S\ref{sec:results} &
+All four tested and reported as found & Unchanged \\
+\midrule
+Whole-session comparator & \S\ref{sec:results-migration} &
+Fitted LightGBM on unconstrained sessions & \textbf{Exploratory} (A33):
+replaced an arithmetic stage-average that was true by construction \\
+\addlinespace
+Normalised PR gain & \S\ref{sec:results-performance} &
+$(\text{PR-AUC}-\pi_s)/(1-\pi_s)$ reported alongside lift &
+\textbf{Exploratory} (A31): added after a reviewer observed that lift has a
+prevalence-dependent ceiling \\
+\addlinespace
+Error analysis against a trivial rule & \S\ref{sec:why-not-prediction} &
+Confusion structure at the operating threshold vs.\ always-positive &
+\textbf{Exploratory}: not pre-specified; the study's principal
+decision-support finding rests on it and it is labelled accordingly \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+The final three rows deserve emphasis. Each is exploratory, and one of them
+--- the comparison against a trivial targeting rule --- carries the paper's
+sharpest decision-support claim. We report it prominently because we judge it
+important, and we label it exploratory because it was not pre-specified. Both
+statements are true simultaneously, and a reader is entitled to weigh the
+finding accordingly.
+
+%==============================================================================
 \section{Pre-registered protocol and amendment log}
 \label{app:amendments}
 %==============================================================================
 
-The pre-specified protocol (v1.0) and the complete dated amendment log (37
+The pre-specified protocol (v1.0) and the complete dated amendment log (38
 entries) accompany this manuscript. Amendments record every deviation from
 the frozen protocol with its date, rationale and affected sections,
 including three cut-point redefinitions made on the basis of measurement
@@ -1922,6 +2224,83 @@ Multi-level PPM \citep{wickramanayake2023generating} & event / case & prefix-con
 \bottomrule
 \end{tabular}
 \end{table*}
+
+%==============================================================================
+\section{Reproducibility information}
+\label{app:reproducibility}
+%==============================================================================
+
+Three mechanisms support reproduction and they are not equally strong. The
+distinction matters more than the label, so each is stated with its actual
+scope rather than gathered under a single claim.
+
+\emph{Scripted and seeded (strong).} Every reported number is produced by a
+command-line entry point reading splits frozen to disk before any model was
+fitted, over the seed list $\{7,17,23,42,101\}$. Re-executing the headline
+stage-model command regenerated its result tables byte-identically, including
+the bootstrap interval columns, so the pipeline is deterministic on this
+hardware.
+
+\emph{Run logging (strong, prospectively).} Stage models, baselines, tuning,
+attribution and explanation-quality runs log their parameters, summary metrics,
+git commit and output tables to a local MLflow store. Results produced before
+run logging was implemented predate the store; this is recorded rather than
+papered over (amendment A29).
+
+\emph{Pipeline specification (declarative only).} A DVC specification describes
+the dependency structure of the analysis, and each stage's command is the one
+that produced the corresponding artefacts. It has \emph{not} been executed end
+to end, because the first stage requires the 42.4-million-event raw log, which
+is not redistributed. It is an accurate map, not evidence of a push-button
+rebuild (amendment A28).
+
+\begin{table}[htbp]
+\centering
+\caption{Computational environment. Library versions are pinned in a lockfile
+accompanying the manuscript; the full pin set is larger than the selection
+shown. Tree models are CPU-only; the sequence arm is the only component that
+benefits from a GPU.}
+\label{tab:environment}
+\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Component} & \textbf{Version / value} \\
+\midrule
+Python & 3.11.15 \\
+Platform & Windows 10 (build 26200) \\
+Processor & Intel64 Family 6 Model 154 Stepping 4 \\
+numpy & 1.26.4 \\
+scikit-learn & 1.4.2 \\
+scipy & 1.13.1 \\
+pandas / polars & 2.2.3 / 1.43.2 \\
+LightGBM & 4.7.0 \\
+XGBoost & 2.1.4 \\
+CatBoost & 1.2.10 \\
+shap & 0.45.1 \\
+Optuna & 3.6.2 \\
+MLflow & 2.22.5 \\
+DVC & 3.67.1 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Measured wall-clock costs are reported only where a run was instrumented. The
+appendix generation run required 332\,s to fit the diagnostic stage models at
+one seed and 761\,s to compute TreeSHAP across the three stages. Every other
+pipeline step is reported as unmeasured rather than assigned a
+plausible-looking figure, because a runtime a reader might plan against should
+be observed rather than inferred.
+
+The repository accompanying this manuscript contains the analysis code, the
+frozen splits, the seed list, provenance hashes for both datasets, all result
+tables in machine-readable form, the figure-generation code, the dated
+amendment log, and the test suite (337 tests) that guards the leakage,
+splitting and metric invariants described in
+Section~\ref{sec:methods}. Dataset~A is available from the UCI Machine
+Learning Repository; Dataset~B is publicly distributed under its own terms,
+which a reproducer must accept directly.
+\newline
+[DATA REQUIRED: public repository DOI or URL, to be inserted on acceptance.]
 
 %==============================================================================
 

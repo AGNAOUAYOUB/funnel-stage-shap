@@ -121,7 +121,7 @@ def test_ablation_and_performance_figures_render(tmp_path) -> None:
 
 def test_all_appendix_diagrams_render(tmp_path) -> None:
     built = appendix_diagrams.build_all(tmp_path)
-    assert set(built) == {"figA9", "figA10", "figA11", "figA12"}
+    assert set(built) == {"figA9", "figA10", "figA11", "figA12", "fig9"}
     for written in built.values():
         assert all(p.exists() and p.stat().st_size > 0 for p in written)
 
@@ -205,3 +205,40 @@ def test_cost_table_ignores_a_runtime_file_with_null_seconds(tmp_path) -> None:
 
     row = table.filter(pl.col("command") == "stage-models").to_dicts()[0]
     assert row["status"] == "not measured"
+
+
+def test_error_analysis_compares_against_the_trivial_positive_rule(scores) -> None:
+    """A targeting rule that flags everyone is free; a model must beat it."""
+    thresholds = {"S1": 0.4, "S2": 0.4, "S3": 0.3}
+    table = appendix_tables.error_analysis_table(scores, thresholds)
+
+    assert table.height == 3
+    for row in table.to_dicts():
+        pi = row["prevalence"]
+        assert row["trivial_positive_f1"] == pytest.approx(2 * pi / (1 + pi), abs=1e-4)
+        assert row["tp"] + row["fp"] + row["fn"] + row["tn"] == row["n_test"]
+        assert row["f1_over_trivial"] == pytest.approx(
+            row["f1"] - row["trivial_positive_f1"], abs=1e-4
+        )
+
+
+def test_error_analysis_flags_a_degenerate_always_positive_model() -> None:
+    """At a threshold below every score the model IS the trivial rule."""
+    y = np.array([0, 1, 1, 0, 1, 1])
+    p = np.full(6, 0.9)
+    table = appendix_tables.error_analysis_table({"S3": (y, p)}, {"S3": 0.1})
+    row = table.to_dicts()[0]
+
+    assert row["flag_rate"] == pytest.approx(1.0)
+    assert row["recall"] == pytest.approx(1.0)
+    assert row["f1_over_trivial"] == pytest.approx(0.0, abs=1e-4)
+
+
+def test_error_analysis_reports_fp_per_tp_and_handles_no_positives() -> None:
+    y = np.array([0, 0, 0, 0])
+    p = np.array([0.9, 0.9, 0.1, 0.1])
+    row = appendix_tables.error_analysis_table({"S1": (y, p)}, {"S1": 0.5}).to_dicts()[0]
+
+    assert row["tp"] == 0
+    assert row["fp"] == 2
+    assert row["fp_per_tp"] is None, "no true positives means the ratio is undefined"

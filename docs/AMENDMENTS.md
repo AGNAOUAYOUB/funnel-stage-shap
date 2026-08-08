@@ -1073,3 +1073,29 @@ same session -- `appendix-stage-fit` 332.39s, `appendix-shap` 761.06s -- and cor
 the run that produced the cache still on disk. They are restored observations, not
 re-estimates; had no record survived, the correct action would have been to re-run the
 timed command rather than reconstruct a plausible figure.
+
+### A38. Decision-support restructuring; error analysis is exploratory (Sec. 15)
+
+**Decision.** The manuscript was restructured toward a Decision Support Systems framing:
+a new Section 8 (Decision-support interpretation) with a decision-support architecture
+figure and a stage-by-stage implications table; an introduction that opens on the decision
+rather than the model; a protocol-alignment appendix mapping every pre-specified element to
+its implementation and status; and a reproducibility appendix.
+
+**New empirical content, and its status.** The section rests on an error analysis comparing
+each stage's operating point against the always-positive rule, whose F1 is 2*pi/(1+pi).
+Result: at S3 the model refers 99.0% of sessions and beats the trivial rule by 0.0008 F1
+points, while S1 refers 17.4% and beats it by 0.0647. This is the study's sharpest
+decision-support finding and it is **exploratory** -- it was not pre-specified. It is
+reported prominently because it is important and labelled exploratory because it is, and
+Appendix A carries that label alongside the other two post-hoc additions (the whole-session
+comparator and normalised PR gain).
+
+**Why the comparator matters.** Precision, recall and F1 read in isolation make the S3
+operating point look respectable (F1 0.686). Only the trivial-rule reference exposes it as
+operationally equivalent to a blanket policy. A DSS paper that omitted this reference would
+have reported its weakest stage as its strongest.
+
+**Table arithmetic.** The F1 margin is computed from the rounded components rather than by
+rounding the exact difference, so the published columns subtract correctly; the alternative
+leaves the printed table off by one in the last place, which reads as an arithmetic error.

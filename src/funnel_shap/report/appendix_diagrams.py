@@ -197,10 +197,76 @@ def diagram_model_architecture(directory: Path = FIGURES) -> list[Path]:
     return _save(fig, "figA12_model_architecture", directory)
 
 
+def diagram_decision_support(directory: Path = FIGURES) -> list[Path]:
+    """From behavioural data to an intervention decision, and back.
+
+    The loop matters as much as the chain: an intervention changes the very
+    behaviour the next prediction is computed from, which is why the
+    stage-conditioned design cannot be evaluated once and then left alone.
+    """
+    fig, ax = _canvas(9.6, 5.4)
+    ax.text(50, 96, "Decision-support architecture", ha="center",
+            fontsize=11, weight="bold")
+
+    chain = [
+        ("Behavioural\ndata", SKY),
+        ("Sequential\nrepresentation", BLUE),
+        ("Stage\nprediction", GREEN),
+        ("Prefix-constrained\nSHAP", YELLOW),
+        ("Stage\ninterpretation", ORANGE),
+        ("Managerial\ndecision", PINK),
+    ]
+    # Boxes are sized to the longest label ("Prefix-constrained"), which
+    # overflows at the spacing the shorter labels would allow.
+    width, gap = 14.6, 1.9
+    x0 = (100 - (len(chain) * width + (len(chain) - 1) * gap)) / 2
+    for i, (label, colour) in enumerate(chain):
+        x = x0 + i * (width + gap)
+        _box(ax, x, 62, width, 15, label, fc=colour, tc="white", ec=colour,
+             fontsize=6.9, weight="bold")
+        if i:
+            _arrow(ax, (x - gap - 0.4, 69.5), (x - 0.6, 69.5))
+
+    # What each link contributes, and what it cannot supply on its own.
+    notes = [
+        "events, ordered",
+        "prefix only:\nno future events",
+        "$\\hat{p}$ and its\nuncertainty",
+        "why, at this\nstage",
+        "which lever,\nwhen",
+        "act / withhold",
+    ]
+    for i, note in enumerate(notes):
+        x = x0 + i * (width + gap)
+        _box(ax, x, 44, width, 14, note, fc=LIGHT, ec=GREY, fontsize=6.4)
+        _arrow(ax, (x + width / 2, 61.6), (x + width / 2, 58.4), color=GREY, lw=0.9)
+
+    _box(ax, x0 + 4 * (width + gap), 26, width * 2 + gap, 12,
+         "Intervention", fc=GREY, tc="white", ec=GREY, fontsize=8, weight="bold")
+    _arrow(ax, (x0 + 5 * (width + gap) + width / 2, 43.6),
+           (x0 + 5 * (width + gap) + width / 2, 38.4), color=PINK)
+
+    # Feedback: the intervention perturbs the stream the next prediction reads.
+    _arrow(ax, (x0 + 4 * (width + gap), 32), (x0 + width / 2, 32),
+           color=ORANGE, ls="--", rad=-0.16)
+    ax.text(50, 21, "outcome feedback: the intervention alters the behaviour "
+                    "the next prediction is computed from",
+            ha="center", fontsize=7, color=ORANGE, style="italic")
+
+    _box(ax, x0, 4, len(chain) * width + (len(chain) - 1) * gap, 12,
+         "Prediction alone stops at the third box. It yields a score without a reason, at a "
+         "stage it cannot name,\nand so cannot say which lever to pull or when. The "
+         "explanation and interpretation links are what convert\na ranked list into a "
+         "decision -- and the evidence here is that their value is highest early, not at the cart.",
+         fc="white", ec=BLUE, fontsize=7.2, ls="--")
+    return _save(fig, "fig9_decision_support", directory)
+
+
 def build_all(directory: Path = FIGURES) -> dict[str, list[Path]]:
     return {
         "figA9": diagram_research_workflow(directory),
         "figA10": diagram_training_pipeline(directory),
         "figA11": diagram_shap_workflow(directory),
         "figA12": diagram_model_architecture(directory),
+        "fig9": diagram_decision_support(directory),
     }

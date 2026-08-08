@@ -1241,6 +1241,13 @@ def appendix(
     appendix_tables.literature_comparison_table().write_csv(
         paths.TABLES / "appendix_literature_comparison.csv"
     )
+    errors = appendix_tables.error_analysis_table(scores, thresholds)
+    errors.write_csv(paths.TABLES / f"appendix_error_analysis_{suffix}.csv")
+    typer.echo("")
+    typer.echo(errors.select(
+        ["stage", "flag_rate", "precision", "recall", "f1",
+         "trivial_positive_f1", "f1_over_trivial", "fp_per_tp"]
+    ))
 
     typer.echo("")
     for name, files in sorted(written.items()):

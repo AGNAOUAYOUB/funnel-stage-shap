@@ -16,6 +16,7 @@ from __future__ import annotations
 import platform
 from pathlib import Path
 
+import numpy as np
 import polars as pl
 
 from ..paths import TABLES
@@ -107,6 +108,66 @@ def computational_cost_table(directory: Path = TABLES) -> pl.DataFrame:
                 "seconds": seconds,
                 "minutes": round(seconds / 60.0, 2) if seconds is not None else None,
                 "status": "measured" if seconds is not None else "not measured",
+            }
+        )
+    return pl.DataFrame(rows)
+
+
+def error_analysis_table(
+    scores_by_stage: dict[str, tuple],
+    thresholds: dict[str, float],
+) -> pl.DataFrame:
+    """Confusion counts at the operating threshold, against a trivial rule.
+
+    The comparator is the always-positive classifier, whose F1 is
+    ``2*pi/(1+pi)`` at prevalence ``pi``. It is the right null for a decision
+    system: a targeting rule that flags everyone costs nothing to build, so a
+    model earns its place only by beating it. Reporting precision and recall
+    without this reference makes a degenerate operating point look respectable
+    -- an F1 of 0.69 reads well until one notices that flagging every session
+    scores 0.685.
+
+    `flag_rate` is the share of sessions the model would refer for
+    intervention, and `fp_per_tp` the false positives incurred per true
+    positive: the two quantities an operator actually budgets against.
+    """
+    rows = []
+    for stage in sorted(scores_by_stage, key=lambda s: {"S1": 0, "S2": 1, "S3": 2}.get(s, 99)):
+        y_true, y_score = scores_by_stage[stage]
+        y_true = np.asarray(y_true).astype(int).ravel()
+        y_score = np.asarray(y_score, dtype=float).ravel()
+        threshold = float(thresholds.get(stage, 0.5))
+        predicted = (y_score >= threshold).astype(int)
+
+        tp = int(((predicted == 1) & (y_true == 1)).sum())
+        fp = int(((predicted == 1) & (y_true == 0)).sum())
+        fn = int(((predicted == 0) & (y_true == 1)).sum())
+        tn = int(((predicted == 0) & (y_true == 0)).sum())
+
+        precision = tp / (tp + fp) if tp + fp else 0.0
+        recall = tp / (tp + fn) if tp + fn else 0.0
+        f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
+        prevalence = float(y_true.mean())
+        trivial_f1 = 2 * prevalence / (1 + prevalence) if prevalence else 0.0
+
+        rows.append(
+            {
+                "stage": stage,
+                "n_test": int(y_true.size),
+                "prevalence": round(prevalence, 4),
+                "threshold": round(threshold, 4),
+                "tp": tp, "fp": fp, "fn": fn, "tn": tn,
+                "precision": round(precision, 4),
+                "recall": round(recall, 4),
+                # The margin is derived from the *rounded* components so the
+                # published columns subtract correctly. Rounding the exact
+                # difference independently can leave the printed table off by
+                # one in the last place, which reads as an arithmetic error.
+                "f1": round(f1, 4),
+                "trivial_positive_f1": round(trivial_f1, 4),
+                "f1_over_trivial": round(round(f1, 4) - round(trivial_f1, 4), 4),
+                "flag_rate": round(float((predicted == 1).mean()), 4),
+                "fp_per_tp": round(fp / tp, 2) if tp else None,
             }
         )
     return pl.DataFrame(rows)
