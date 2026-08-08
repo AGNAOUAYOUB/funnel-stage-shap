@@ -242,3 +242,68 @@ def test_error_analysis_reports_fp_per_tp_and_handles_no_positives() -> None:
     assert row["tp"] == 0
     assert row["fp"] == 2
     assert row["fp_per_tp"] is None, "no true positives means the ratio is undefined"
+
+
+def _seed_frame(stage, prevalence, precisions):
+    return pl.DataFrame({
+        "stage": [stage] * len(precisions),
+        "feature_set": ["full"] * len(precisions),
+        "seed": list(range(len(precisions))),
+        "prevalence": [prevalence] * len(precisions),
+        "precision": list(precisions),
+    })
+
+
+def test_decision_economics_uses_all_seeds_and_shows_instability() -> None:
+    """A near-zero numerator makes 1/x unstable; the range must be visible."""
+    frame = pl.concat([
+        _seed_frame("S1", 0.0734, [0.135, 0.140, 0.138, 0.142, 0.139]),
+        _seed_frame("S3", 0.5214, [0.523, 0.526, 0.522, 0.529, 0.5215]),
+    ])
+    table = appendix_tables.decision_economics_table(frame)
+
+    s1 = table.filter(pl.col("stage") == "S1").to_dicts()[0]
+    s3 = table.filter(pl.col("stage") == "S3").to_dicts()[0]
+
+    assert s1["n_seeds"] == 5 and s3["n_seeds"] == 5
+    # S1 is comfortably above chance; S3 is not.
+    assert s1["sd_from_zero"] > 10
+    assert s3["sd_from_zero"] < 3
+    # The instability must be reported, not smoothed into a point estimate.
+    assert s3["contacts_max"] > s3["contacts_per_incremental"] * 2
+
+
+def test_decision_economics_counts_seeds_at_or_below_chance() -> None:
+    frame = _seed_frame("S3", 0.52, [0.53, 0.51, 0.52, 0.54, 0.50])
+    row = appendix_tables.decision_economics_table(frame).to_dicts()[0]
+    assert row["seeds_at_or_below_chance"] == 3
+
+
+def test_entropy_availability_separates_artefact_from_signal() -> None:
+    """If the restricted share still peaks at the same stage, it is not availability."""
+    rng = np.random.default_rng(3)
+    explanations = {}
+    for stage, frac_defined, weight in (("S1", 0.15, 0.2), ("S2", 0.40, 4.0), ("S3", 0.10, 0.5)):
+        n = 200
+        names = ["category_entropy", "other_a", "other_b"]
+        matrix = np.zeros((n, 3))
+        n_def = int(n * frac_defined)
+        matrix[:n_def, 0] = rng.uniform(0.2, 1.0, size=n_def)
+        shap = rng.normal(scale=0.1, size=(n, 3))
+        shap[:n_def, 0] = rng.normal(scale=weight, size=n_def)
+        explanations[stage] = _Explanation(_Attribution(names, shap), matrix)
+
+    table = appendix_tables.entropy_availability_table(explanations)
+    rows = {r["stage"]: r for r in table.to_dicts()}
+
+    assert rows["S1"]["share_prefixes_defined"] == pytest.approx(0.15, abs=0.01)
+    assert rows["S2"]["share_prefixes_defined"] == pytest.approx(0.40, abs=0.01)
+    # Availability rises S1 -> S2, but so does the share among defined prefixes,
+    # which is what distinguishes a real signal from an artefact.
+    peak = max(rows, key=lambda s: rows[s]["attribution_share_when_defined"])
+    assert peak == "S2"
+
+
+def test_entropy_availability_reports_a_missing_feature(explanations) -> None:
+    table = appendix_tables.entropy_availability_table(explanations, feature="not_a_feature")
+    assert all(r["feature_present"] is False for r in table.to_dicts())

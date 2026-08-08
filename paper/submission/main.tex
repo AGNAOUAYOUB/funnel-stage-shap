@@ -197,7 +197,7 @@ and the distinction is deliberate: the document was version-frozen and is
 distributed with the manuscript, but it was not deposited in a
 time-stamping registry, so readers should weight it as an auditable record
 of intent rather than as third-party-certified priority.
-Thirty-nine amendments were logged, several of which reverse an initial
+Forty amendments were logged, several of which reverse an initial
 decision on the basis of measurement; we regard this record as part of the
 contribution rather than an embarrassment to be hidden.
 
@@ -1552,9 +1552,14 @@ Price and browsing breadth carry most attribution; the model is selective
 (flag rate 0.174, $F_1$ margin $+0.065$) &
 This is where targeting adds most over a blanket rule, and where the
 explanation is most faithful ($\rho = 0.571$) &
-Assortment and price-transparency treatments; entry-point merchandising &
-$\approx$6 false positives per true positive; over-discounting visitors who
-would convert unaided \\
+The attributed features are \texttt{price\_max}, \texttt{price\_mean} and
+\texttt{n\_unique\_products}, so the lever is the \emph{price range and
+breadth of the first two product impressions}: seeding entry results with a
+wider price spread, or surfacing a lower-priced alternative alongside the
+first item viewed &
+$\approx$6 false positives per true positive; discounting visitors who would
+convert unaided; changing entry assortment affects all visitors, not only
+those flagged \\
 \addlinespace
 S2 \newline consideration &
 Engagement/temporal (36.8\%), navigation entropy (22.4\%) &
@@ -1562,9 +1567,14 @@ Comparison behaviour peaks here; navigation attribution triples from S1 and
 falls again by S3 &
 Comparison support is indicated at this stage specifically, and only a
 stage-conditioned analysis reveals it &
-Comparison aids, filtering and ranking help, category navigation support &
+The attributed features are \texttt{category\_entropy} and
+\texttt{n\_category\_transitions}, so the lever is \emph{cross-category
+comparison}, not within-category refinement: a persistent side-by-side
+compare tray spanning the categories already visited, rather than more
+filters inside one category &
 $\approx$10 false positives per true positive; weakest faithfulness of the
-three stages ($\rho = 0.494$, below the pre-set 0.5) \\
+three stages ($\rho = 0.494$, below the pre-set 0.5), so this is the stage
+whose stated reason should carry least weight \\
 \addlinespace
 S3 \newline intent &
 Engagement (33.8\%), price returns (37.9\%) &
@@ -1618,41 +1628,81 @@ the \emph{incremental} precision, $\text{precision} - \pi_s$, and the
 break-even becomes $u^{*}_{\text{inc}} = c / \big( (\text{precision} - \pi_s)
 \cdot m \big)$. Table~\ref{tab:economics} reports both.
 
-\begin{table}[htbp]
+\begin{table*}[htbp]
 \centering
-\caption{Decision economics at each stage's operating point, derived from the
-measured precision and prevalence in Table~\ref{tab:error}. ``Contacts per
-incremental conversion'' is $1/(\text{precision} - \pi_s)$: the number of
-sessions that must be contacted to obtain one conversion \emph{beyond} what
-contacting everyone would already have delivered. Costs and margins are
-deliberately left as free parameters; no monetary figures for this retailer
-were available and none are assumed.}
+\caption{Decision economics at each stage's operating point, over the five
+frozen seeds. ``Contacts per incremental conversion'' is
+$1/(\text{precision} - \pi_s)$: the sessions that must be contacted to obtain
+one conversion \emph{beyond} what contacting everyone already delivers.
+$\sigma$ from zero is the incremental precision divided by its seed standard
+deviation. The per-seed range is reported because the reciprocal of a
+near-zero quantity is unstable, and at S3 it is: a point estimate there would
+imply a precision the data do not support. Costs and margins are free
+parameters; no monetary figures for this retailer were available and none are
+assumed.}
 \label{tab:economics}
 \small
-\begin{tabular}{@{}lS[table-format=1.4]S[table-format=1.4]S[table-format=1.4]S[table-format=1.3]S[table-format=3.1]@{}}
+\begin{tabular}{@{}lS[table-format=1.4]S[table-format=1.4]cS[table-format=2.2]S[table-format=3.1]l@{}}
 \toprule
-\textbf{Stage} & {\textbf{Precision}} & {$\pi_s$} &
-{\textbf{Precision} $-\pi_s$} & {\textbf{Ratio} $\text{prec}/\pi_s$} &
-{\textbf{Contacts per incr.\ conv.}} \\
+\textbf{Stage} & {$\pi_s$} & {\textbf{Precision}} &
+\textbf{Precision} $-\pi_s$ & {$\sigma$ \textbf{from 0}} &
+{\textbf{Contacts per incr.\ conv.}} & \textbf{Per-seed range} \\
 \midrule
-S1 & 0.1430 & 0.0734 & 0.0696 & 1.948 & 14.4 \\
-S2 & 0.0914 & 0.0589 & 0.0325 & 1.552 & 30.8 \\
-S3 & 0.5238 & 0.5214 & 0.0024 & 1.005 & 416.7 \\
+S1 & 0.0734 & 0.1387 & $+0.0654 \pm 0.0070$ & 9.34 & 15.3 & 13--18 \\
+S2 & 0.0589 & 0.0871 & $+0.0281 \pm 0.0035$ & 8.03 & 35.5 & 31--39 \\
+S3 & 0.5214 & 0.5253 & $+0.0039 \pm 0.0035$ & 1.11 & 256.9 & 104--34{,}751 \\
 \bottomrule
 \end{tabular}
-\end{table}
+\end{table*}
 
-The final column is the paper's most directly actionable number. To obtain one
-conversion beyond what a blanket policy already delivers, an organisation must
-contact roughly 14 sessions at exploration, 31 at consideration, and 417 at
-purchase intent. Per contact, targeting at S1 is worth approximately 29 times
-what it is worth at S3, and this ratio is independent of $c$ and $m$: it
-depends only on quantities the study measures. Whatever the retailer's true
-cost and margin, the ordering does not move, and the break-even uplift
-required to justify cart-stage targeting is roughly 29 times that required at
-exploration.
+The final two columns carry the argument. To obtain one conversion beyond
+what a blanket policy already delivers, an organisation must contact roughly
+15 sessions at exploration and 36 at consideration. Both figures are stable
+across seeds, and both incremental precisions sit eight or more standard
+deviations from zero.
 
-Two boundaries on this calculation should be stated rather than left implicit.
+S3 is different in kind, not merely in degree. Its incremental precision is
+$+0.0039 \pm 0.0035$, barely one standard deviation from zero, and the
+per-seed contact requirement ranges from 104 to over 34{,}000. The honest
+statement is therefore not that cart-stage targeting costs 257 contacts per
+incremental conversion but that \emph{its incremental value is not
+distinguishable from zero, so the cost per incremental conversion is unbounded
+above}. An earlier version of this analysis reported a single-seed point
+estimate of 417, which conveyed a precision the five-seed evidence does not
+support; the instability is the finding, and it is reported rather than
+averaged away.
+
+The ordering, by contrast, is robust: targeting at exploration is worth
+roughly an order of magnitude more per contact than at consideration and is
+not comparable at all to intent. This ordering depends only on measured
+precision and prevalence, so it holds whatever the retailer's true $c$ and
+$m$.
+
+\paragraph{Does tuning rescue the intent stage?} The headline models use
+default hyperparameters, and a natural objection is that a tuned model might
+recover decision value at S3, where tuning raises PR-AUC most (0.568 to
+0.600). It does not. Refitting with the Optuna-selected configurations moves
+S3's incremental precision from $+0.0039 \pm 0.0035$ to $+0.0017 \pm 0.0017$
+--- that is, \emph{further} toward zero, with one of the five seeds falling at
+or below chance entirely, so the mean contact requirement rises from 257 to
+roughly 600 and its upper range becomes unbounded. Tuning simultaneously
+improves S3's ranking metrics (ROC-AUC 0.570 to 0.601) and degrades its
+targeting value.
+
+This is the paper's central argument appearing inside its own robustness
+check. Optimising a threshold-free ranking criterion produced a model that
+orders sessions better and separates them from chance no better, because at a
+prevalence of 0.52 there is almost no separation available to find. Two
+consequences follow. First, the hyperparameter choice is not what sustains
+the S3 conclusion: the conclusion is stronger under tuning, not weaker, so
+nothing in the decision-support argument rests on the use of defaults.
+Second, the episode is itself evidence for the paper's thesis, since a
+practitioner who tuned for PR-AUC and stopped there would have concluded that
+the intent stage had improved. At S2, by contrast, tuning does help on both
+counts (contacts fall from 35.5 to 25.6), which is what makes the S3 result
+interpretable rather than a general artefact of tuning.
+
+Two further boundaries on this calculation should be stated rather than left implicit.
 First, it assumes the intervention's uplift $u$ does not itself vary by stage.
 That is unlikely to hold --- a customer at the cart may be more responsive to
 a well-timed nudge than a browser at entry --- and if $u$ rises steeply enough
@@ -1819,14 +1869,52 @@ signal and explanation fidelity. The second is representational: comparison
 behaviour may be genuinely multi-modal --- some customers narrow, others
 broaden --- so that a single attribution vector averages over qualitatively
 different journeys and is faithful to none of them. The third is
-methodological: navigation entropy is undefined for single-category prefixes
-and only becomes informative once several categories have been visited, so
-its S2 peak is partly a property of when the feature becomes computable
-rather than of when the behaviour matters. We flag this last possibility
-explicitly because it would attenuate the study's most striking attribution
-finding, and we have not been able to rule it out; separating it would
-require a feature-construction ablation that holds definitional availability
-constant across stages, which we did not pre-specify and do not report.
+methodological: navigation entropy is zero for a prefix confined to a single
+category and only becomes informative once several categories have been
+visited, so its S2 peak might be a property of when the feature becomes
+computable rather than of when the behaviour matters.
+
+The third reading is testable, and because it would attenuate the study's most
+striking attribution finding we tested it rather than leaving it as a caveat.
+Table~\ref{tab:entropy-availability} reports, per stage, the share of explained
+prefixes for which entropy is non-degenerate, together with the attribution
+share computed overall and computed only on those prefixes. Availability does
+rise from S1 to S2, from 16.5\% to 38.7\% of prefixes, so part of the concern
+is well founded. But conditioning on availability does not remove the peak: it
+sharpens it. Among prefixes where entropy is actually defined, the family
+carries 1.8\% of attribution at S1, 20.2\% at S2 and 4.3\% at S3 --- an
+eleven-fold gap between S1 and S2 that cannot be explained by the feature
+being computable more often, because both figures are computed only where it
+is computable. This analysis is \textbf{exploratory}; it was prompted by the
+alternative explanation rather than pre-specified.
+
+\begin{table}[htbp]
+\centering
+\caption{Separating definitional availability from behavioural signal for
+navigation entropy (seed 42). ``Defined'' prefixes are those spanning more
+than one category, for which the entropy feature is non-degenerate. If the
+S2 peak were an artefact of availability, the restricted share would flatten;
+it does not.}
+\label{tab:entropy-availability}
+\small
+\begin{tabular}{@{}lS[table-format=2.1]S[table-format=1.4]S[table-format=1.4]@{}}
+\toprule
+\textbf{Stage} & {\textbf{Prefixes defined (\%)}} &
+{\textbf{Attribution share, all}} & {\textbf{Attribution share, defined only}} \\
+\midrule
+S1 & 16.5 & 0.0051 & 0.0184 \\
+S2 & 38.7 & 0.1340 & 0.2016 \\
+S3 & 10.7 & 0.0075 & 0.0431 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The behavioural reading therefore survives the correction, though with a
+qualification worth stating: availability and attribution peak at the same
+stage, and no design that measures entropy on observed prefixes can fully
+separate ``customers compare here'' from ``comparison becomes measurable
+here''. What the test establishes is the weaker but sufficient claim that the
+peak is not \emph{merely} definitional.
 
 For deployment the consequence is uncomfortable but clear. The stage that
 most invites a targeted intervention is the stage at which the reason offered
@@ -2097,6 +2185,15 @@ Error analysis against a trivial rule & \S\ref{sec:why-not-prediction} &
 Confusion structure at the operating threshold vs.\ always-positive &
 \textbf{Exploratory}: not pre-specified; the study's principal
 decision-support finding rests on it and it is labelled accordingly \\
+\addlinespace
+Decision economics & \S\ref{sec:decision-economics} &
+Contacts per incremental conversion, five seeds, with dispersion &
+\textbf{Exploratory}: added in response to review \\
+\addlinespace
+Entropy availability test & \S\ref{sec:s2-problem} &
+Attribution share restricted to prefixes where entropy is non-degenerate &
+\textbf{Exploratory}: added in response to review, to test whether the S2
+peak is definitional \\
 \bottomrule
 \end{tabular}
 \end{table*}
@@ -2113,7 +2210,7 @@ finding accordingly.
 \label{app:amendments}
 %==============================================================================
 
-The pre-specified protocol (v1.0) and the complete dated amendment log (39
+The pre-specified protocol (v1.0) and the complete dated amendment log (40
 entries) accompany this manuscript. Amendments record every deviation from
 the frozen protocol with its date, rationale and affected sections,
 including three cut-point redefinitions made on the basis of measurement

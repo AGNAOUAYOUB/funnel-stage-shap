@@ -1150,3 +1150,45 @@ from a written file rather than a heredoc, with a parser-sanity assertion that f
 document yields zero sections, labels or references. Re-run properly, the manuscript is
 clean: 121 references, 103 labels, no undefined cross-references, no missing citation keys or
 figures. The check was hollow; the manuscript was not.
+
+### A40. Second review round: two objections settled empirically; a single-seed error corrected (Sec. 15)
+
+**Tuning does not rescue the intent stage (exploratory).** Reviewers pressed twice for tuned
+models to become the headline, on the grounds that tuning lifts S3 PR-AUC by 0.032. Tested
+directly: tuning moves S3's incremental precision from +0.0039 +/- 0.0035 to
++0.0017 +/- 0.0017 -- *further* toward zero, with one of five seeds at or below chance --
+so the contact requirement rises from ~257 to ~600 with an unbounded upper range. Tuning
+improves S3's ranking metrics (ROC-AUC 0.570 -> 0.601) while degrading its targeting value.
+The decision-support conclusion is therefore stronger under tuning, not weaker, and nothing
+in it depends on the use of defaults. At S2 tuning helps on both counts (35.5 -> 25.6
+contacts), which is what makes the S3 result interpretable rather than a general artefact.
+
+**The S2 navigation peak is not merely definitional (exploratory).** Category entropy is zero
+for single-category prefixes, so its S2 peak might reflect when the feature becomes
+computable. Measured: availability rises from 16.5% of prefixes at S1 to 38.7% at S2, so the
+concern is well founded. But restricting attribution to prefixes where entropy is defined
+sharpens rather than flattens the peak -- 1.8% (S1), 20.2% (S2), 4.3% (S3). An eleven-fold
+S1/S2 gap survives when both sides are computed only where the feature exists. The residual
+qualification is stated: no design measuring entropy on observed prefixes can fully separate
+"customers compare here" from "comparison becomes measurable here".
+
+**A single-seed figure was presented as general.** The decision economics table was derived
+from the seed-42 confusion matrix while the rest of the paper reports five-seed means. The
+five-seed view changes the S3 story materially: incremental precision is +0.0039 +/- 0.0035,
+about one standard deviation from zero, and the per-seed contact requirement ranges from 104
+to over 34,000. The earlier point estimate of 417 conveyed a precision the evidence does not
+support. The table now reports the mean, the dispersion, the distance from zero in seed
+standard deviations, and the per-seed range; the honest claim is that S3's incremental value
+is not distinguishable from zero and its cost per incremental conversion is unbounded above.
+The S1 and S2 figures were unaffected in substance (15.3 and 35.5 contacts, both eight or
+more standard deviations from zero).
+
+**Interventions grounded in attributed features.** Table 12's intervention column previously
+named generic treatment categories. Each row now names the features carrying the
+attribution and derives the lever from them -- price range and breadth of the first two
+impressions at S1; cross-category rather than within-category comparison at S2 -- so the
+specificity is traceable to measurement rather than to domain assertion. Efficacy remains
+untested; these are hypotheses the attribution generates.
+
+**Both new analyses are exploratory** and labelled as such in the text and in the alignment
+appendix. Both were prompted by review rather than pre-specified.

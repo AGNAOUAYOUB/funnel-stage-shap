@@ -173,6 +173,106 @@ def error_analysis_table(
     return pl.DataFrame(rows)
 
 
+def decision_economics_table(per_seed: pl.DataFrame) -> pl.DataFrame:
+    """Contacts required per conversion *beyond* a blanket targeting rule.
+
+    Computed over the full seed list rather than one seed, because the
+    quantity is reported as a general property. That matters more here than
+    elsewhere: the S3 numerator (precision minus prevalence) sits close to
+    zero, so its reciprocal is unstable, and a single-seed point estimate
+    would imply a precision the data do not support. The per-seed range is
+    returned alongside the mean so the instability is visible rather than
+    averaged away.
+    """
+    rows = []
+    frame = per_seed.filter(pl.col("feature_set") == "full")
+    for stage in sorted(
+        frame["stage"].unique().to_list(), key=lambda s: {"S1": 0, "S2": 1, "S3": 2}.get(s, 99)
+    ):
+        sub = frame.filter(pl.col("stage") == stage)
+        prevalence = sub["prevalence"].to_numpy()
+        precision = sub["precision"].to_numpy()
+        incremental = precision - prevalence
+
+        positive = incremental[incremental > 0]
+        contacts = 1.0 / positive if positive.size else np.array([])
+        mean_inc = float(incremental.mean())
+
+        rows.append(
+            {
+                "stage": stage,
+                "n_seeds": int(sub.height),
+                "prevalence": round(float(prevalence.mean()), 4),
+                "precision_mean": round(float(precision.mean()), 4),
+                "precision_sd": round(float(precision.std(ddof=1)), 4),
+                "incremental_mean": round(mean_inc, 4),
+                "incremental_sd": round(float(incremental.std(ddof=1)), 4),
+                # Distance from zero in seed standard deviations: below about
+                # two, the stage's targeting value is not established.
+                "sd_from_zero": round(
+                    mean_inc / float(incremental.std(ddof=1)), 2
+                ) if incremental.std(ddof=1) > 0 else None,
+                "contacts_per_incremental": round(1.0 / mean_inc, 1) if mean_inc > 0 else None,
+                "contacts_min": round(float(contacts.min()), 1) if contacts.size else None,
+                "contacts_max": round(float(contacts.max()), 1) if contacts.size else None,
+                "seeds_at_or_below_chance": int((incremental <= 0).sum()),
+            }
+        )
+    return pl.DataFrame(rows)
+
+
+def entropy_availability_table(
+    explanations: dict,
+    feature: str = "category_entropy",
+) -> pl.DataFrame:
+    """Separate a definitional artefact from a behavioural signal.
+
+    Category entropy is zero for a prefix confined to a single category, so a
+    stage where more prefixes span several categories will mechanically show
+    more entropy attribution. This reports, per stage, the share of explained
+    prefixes for which the feature is non-degenerate, and the attribution
+    share both overall and restricted to those prefixes. If the restricted
+    share still peaks at the same stage, the behavioural reading survives the
+    correction; if it does not, the peak was availability.
+    """
+    rows = []
+    for stage in sorted(
+        explanations, key=lambda s: {"S1": 0, "S2": 1, "S3": 2}.get(s, 99)
+    ):
+        explanation = explanations[stage]
+        names = [str(n) for n in explanation.attribution.feature_names]
+        if feature not in names:
+            rows.append({"stage": stage, "feature_present": False})
+            continue
+        j = names.index(feature)
+        matrix = np.asarray(explanation.explained_matrix, dtype=float)
+        shap = np.asarray(explanation.attribution.shap_values, dtype=float)
+
+        defined = matrix[:, j] > 0
+        overall = np.abs(shap).mean(axis=0)
+        share_overall = float(overall[j] / overall.sum()) if overall.sum() else 0.0
+
+        if defined.any():
+            restricted = np.abs(shap[defined]).mean(axis=0)
+            share_defined = float(restricted[j] / restricted.sum()) if restricted.sum() else 0.0
+        else:
+            share_defined = None
+
+        rows.append(
+            {
+                "stage": stage,
+                "feature_present": True,
+                "n_explained": int(matrix.shape[0]),
+                "share_prefixes_defined": round(float(defined.mean()), 4),
+                "attribution_share_overall": round(share_overall, 4),
+                "attribution_share_when_defined": (
+                    round(share_defined, 4) if share_defined is not None else None
+                ),
+            }
+        )
+    return pl.DataFrame(rows)
+
+
 def literature_comparison_table() -> pl.DataFrame:
     """Positioning against the closest sequence-aware explanation methods.
 
