@@ -1099,3 +1099,54 @@ have reported its weakest stage as its strongest.
 **Table arithmetic.** The F1 margin is computed from the rounded components rather than by
 rounding the exact difference, so the published columns subtract correctly; the alternative
 leaves the printed table off by one in the last place, which reads as an arithmetic error.
+
+### A39. Peer-review response: decision economics, S2, and a tooling defect in my own validation (Sec. 15)
+
+**Context.** A reviewer simulation returned a major-revision verdict. Each claim was checked
+against the manuscript before acting; three verified, one did not, and one request could not
+be met honestly.
+
+**Verified and fixed.** (i) "provably flattens" overstated an empirical observation from one
+dataset -- replaced. (ii) "the framework refuted one pre-specified expectation" credited the
+artefact with what the data did -- replaced. (iii) Exploratory analyses were labelled only in
+the alignment appendix, not at the point of use; the body now carries explicit labels
+(occurrences rose from 1 to 6, and the single prior hit was the unrelated word "exploratory
+signals").
+
+**Not verified.** The claim that the decision-support section was "the shortest substantive
+section" was false at the time of review: at 1,325 words it exceeded the conceptual framework
+(882) and the conclusion (467). The underlying concern -- that managerial guidance was thin --
+was nevertheless sound, and is addressed on its merits rather than on the word count.
+
+**Declined, with a substitute.** Reviewers asked for ROI figures and monetised false-positive
+costs. No cost or margin data exist for this retailer, so any such figure would be invented.
+Section 8.3 instead derives the decision economics from measured precision and prevalence
+alone, parameterised by contact cost c and margin m: contacts required per *incremental*
+conversion over a blanket rule are 14.4 (S1), 30.8 (S2) and 416.7 (S3). The 29-fold gap
+between S1 and S3 is independent of c and m, so the ordering holds whatever the retailer's
+true economics. Two boundary conditions are stated rather than assumed away: stage-varying
+uplift, and stage-varying basket value.
+
+**Stale text corrected.** The manuscript described the GRU as "trained briefly", which
+described the pre-A30 fixed eight-epoch run. The current arm is 2x128 GRU, dropout 0.2, Adam
+1e-3 with cosine annealing, batch 512, gradient clipping at unit norm, up to 80 epochs with
+early stopping on validation PR-AUC at patience 10. The description now matches the code.
+
+**New material.** A subsection on the consideration stage: it carries the most distinctive
+attribution structure and simultaneously the weakest faithfulness (0.494, the only sub-
+threshold value), the only negative per-instance agreement, and the weakest lift. Three
+readings are offered and the data cannot separate them -- including the possibility that the
+navigation peak is partly definitional, since entropy is undefined for single-category
+prefixes. That possibility would attenuate the study's most striking attribution finding and
+is flagged rather than buried. The theoretical argument was also extended: predictive skill
+and attribution distinctiveness move in opposite directions along the funnel, which suggests
+a stage is a filtering point rather than merely an information point.
+
+**A defect in my own tooling.** The validation scripts used to check this manuscript were
+written as bash heredocs, which collapse a doubled backslash to a single one. The regex
+intended as \ref therefore became \r -- a carriage return -- so the "undefined
+cross-references: none" result had been passing by matching nothing. Validation is now run
+from a written file rather than a heredoc, with a parser-sanity assertion that fails if the
+document yields zero sections, labels or references. Re-run properly, the manuscript is
+clean: 121 references, 103 labels, no undefined cross-references, no missing citation keys or
+figures. The check was hollow; the manuscript was not.
