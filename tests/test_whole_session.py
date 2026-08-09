@@ -108,3 +108,34 @@ def test_aggregate_shares_sums_within_clusters() -> None:
     assert shares["a+b"] == pytest.approx(0.7)
     assert shares["solo"] == pytest.approx(0.3)
     assert sum(shares.values()) == pytest.approx(1.0)
+
+
+def test_exclude_purchase_drops_only_purchase_events() -> None:
+    """The fair comparator must lose the label without losing the session."""
+    import polars as pl
+
+    from funnel_shap.explain.whole_session import whole_session_events
+
+    sessions = pl.DataFrame({
+        "session_id": ["a", "a", "a", "b", "b"],
+        "user_id": ["u1", "u1", "u1", "u2", "u2"],
+        "event_time": pl.Series(
+            ["2019-10-01T00:00:00", "2019-10-01T00:01:00", "2019-10-01T00:02:00",
+             "2019-10-01T00:00:00", "2019-10-01T00:01:00"]
+        ).str.to_datetime(),
+        "event_type": ["view", "cart", "purchase", "view", "view"],
+        "product_id": ["p1", "p1", "p1", "p2", "p3"],
+        "category_id": ["c1", "c1", "c1", "c2", "c2"],
+        "price": [10.0, 10.0, 10.0, 5.0, 6.0],
+    })
+    cutpoints = pl.DataFrame({"session_id": ["a", "b"], "label": [1, 0]})
+
+    keep_all = whole_session_events(sessions, cutpoints).collect()
+    no_buy = whole_session_events(sessions, cutpoints, exclude_purchase=True).collect()
+
+    assert (keep_all["event_type"] == "purchase").sum() == 1
+    assert (no_buy["event_type"] == "purchase").sum() == 0
+    # The purchasing session survives, minus its purchase event.
+    assert no_buy.filter(pl.col("session_id") == "a").height == 2
+    # And it keeps its positive label: the outcome comes from the cut-point table.
+    assert set(no_buy.filter(pl.col("session_id") == "a")["label"].unique()) == {1}

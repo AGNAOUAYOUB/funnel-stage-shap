@@ -4,16 +4,19 @@
 %
 %  Compile:  latexmk -pdf main.tex        (or pdflatex/bibtex/pdflatex x2)
 %
-%  Class:    elsarticle (Elsevier). If unavailable, swap the lines marked
-%            FALLBACK below for the standard article class.
+%  Class:    cas-sc (Elsevier CAS single-column). The class, cas-common.sty
+%            and cas-model2-names.bst ship with TeX Live and Overleaf.
+%
+%  Citations are author-year (natbib) rendered by cas-model2-names, which is
+%  the APA-style option of the Elsevier CAS bundle.
 %
 %  All numerical results are reproducible from the frozen splits and seed
 %  list in the accompanying repository (reports/tables/).
 %==============================================================================
 
-\documentclass[review,3p,times,authoryear]{elsarticle}   % <-- FALLBACK: comment out
-% \documentclass[11pt,a4paper]{article}                  % <-- FALLBACK: uncomment
-% \usepackage[authoryear,round]{natbib}                  % <-- FALLBACK: uncomment
+\documentclass[a4paper,fleqn]{cas-sc}
+
+\usepackage[authoryear,longnamesfirst]{natbib}
 
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
@@ -24,10 +27,8 @@
 \usepackage{siunitx}
 \usepackage{multirow}
 \usepackage{array}
-\usepackage{caption}
 \usepackage{xcolor}
 \usepackage[section]{placeins}
-\usepackage[hidelinks]{hyperref}
 
 \graphicspath{{figures/}}
 \sisetup{detect-weight=true, detect-family=true}
@@ -36,23 +37,33 @@
 \newcommand{\pass}{\textbf{pass}}
 \newcommand{\fail}{\textit{fail}}
 
-\journal{Decision Support Systems}
-
 \begin{document}
 
-\begin{frontmatter}
+\let\WriteBookmarks\relax
+\def\floatpagepagefraction{1}
+\def\textpagefraction{.001}
 
-\title{Funnel-Stage SHAP: a design science framework for stage-conditioned
-       explainable purchase prediction in e-commerce}
+\shorttitle{Funnel-Stage SHAP}
+\shortauthors{A. Agnaou and S. Ailli}
 
-\author[a]{Ayoub Agnaou\corref{cor1}}
+\title[mode=title]{Funnel-Stage SHAP: a design science framework for
+       stage-conditioned explainable purchase prediction in e-commerce}
+
+\author[1]{Ayoub Agnaou}[orcid=]
+\cormark[1]
 \ead{ay.agnaou@edu.umi.ac.ma}
-\author[a]{S.~Ailli}
-\cortext[cor1]{Corresponding author.}
-\affiliation[a]{organization={Faculty of Sciences, Moulay Isma\"il University},
+\credit{Conceptualisation, Methodology, Software, Formal analysis,
+        Investigation, Data curation, Writing -- original draft, Visualisation}
+
+\author[1]{S. Ailli}[orcid=]
+\credit{Supervision, Validation, Writing -- review and editing}
+
+\affiliation[1]{organization={Faculty of Sciences, Moulay Isma\"il University},
                 addressline={B.P. 11201 Zitoune},
                 city={Meknes},
                 country={Morocco}}
+
+\cortext[1]{Corresponding author.}
 
 \begin{abstract}
 Organisations routinely rank browsing sessions by conversion propensity and
@@ -73,20 +84,26 @@ expectations fail. Prevalence-normalised predictive skill \emph{declines}
 along the funnel (lift 1.79 to 1.09; ROC-AUC 0.641 to 0.570) rather than
 improving; attribution migrates non-monotonically, navigation entropy peaking
 at consideration (3.5\%, 22.4\%, 7.4\%); and explanation paradigms that agree
-on aggregate rankings disagree about individual customers. Evaluated as a
-targeting system rather than a ranker, the intent-stage model refers 99\% of
-sessions and improves on a blanket rule by 0.0008 $F_1$: one conversion beyond
-that rule costs 14 contacts at exploration but 417 at intent. Explanation
-quality and decision value both vary by stage, and we argue that each should
-be measured there.
+on aggregate rankings disagree about individual customers. Two further tests
+qualify how the decline should be read. Scoring all three models on one fixed
+cohort of 821 sessions that reach every stage removes the six-fold prevalence
+difference between the conditional stage populations, and the decline
+disappears (lift 1.047, 1.032, 1.066), locating it in the composition of who
+survives to each stage rather than in the information a longer prefix
+carries. Decision value is likewise threshold-dependent: at a 10\% flag rate
+the intent stage yields the largest incremental precision of the three
+($0.114 \pm 0.013$ against $0.093 \pm 0.002$ at exploration), while
+top-decile ranking lift still falls monotonically (2.27, 1.64, 1.22).
+Explanation quality and decision value both vary by stage, and we argue that
+each should be measured there.
 \end{abstract}
 
-\begin{keyword}
+\begin{keywords}
 Explainable AI \sep SHAP \sep purchase prediction \sep customer journey \sep
 clickstream analysis \sep design science research
-\end{keyword}
+\end{keywords}
 
-\end{frontmatter}
+\maketitle
 
 %==============================================================================
 \section{Introduction}
@@ -147,8 +164,12 @@ behaviour has not yet occurred.
 per feature cannot express that a driver mattered at one point in the journey
 and not at another. If the importance of a behavioural signal genuinely
 changes as intent forms---which the staged view of the consumer journey
-predicts---then a whole-session attribution reports its average, a number
-that may correspond to no phase of the journey at all.
+predicts---then a whole-session attribution replaces the trajectory with one
+number that may correspond to no phase of the journey at all. It is tempting
+to assume that number is the trajectory's average. Section~\ref{sec:results-rq4}
+shows it is not: a whole-session model fitted on these data reallocates
+attribution onto session duration and pace, and reports the stage-specific
+drivers as marginal.
 
 Both defects share a root cause: prediction and explanation are generated
 under different informational regimes. Prefix-based prediction, developed in
@@ -197,23 +218,36 @@ and the distinction is deliberate: the document was version-frozen and is
 distributed with the manuscript, but it was not deposited in a
 time-stamping registry, so readers should weight it as an auditable record
 of intent rather than as third-party-certified priority.
-Forty amendments were logged, several of which reverse an initial
+Forty-three amendments were logged, several of which reverse an initial
 decision on the basis of measurement; we regard this record as part of the
 contribution rather than an embarrassment to be hidden.
 
-Three empirical findings, each running against the pre-specified
-expectation, structure the paper. First, predictive performance does not
-improve along the funnel: the primary metric is non-monotone, ranking skill
-falls monotonically, and the one normalisation under which late-funnel
-performance recovers does so only to a tenth of the available headroom. The
-operating regime in which explanations are most needed---early, when
-intervention is still possible---is also the regime in which the model
-ranks best. Second, attribution mass migrates substantially across
-stages, with navigation behaviour peaking mid-funnel; a fitted whole-session
-model flattens this structure in these data. Third, aggregate agreement
-between explanation paradigms coexists with near-zero agreement about
-individual customers, which cautions against treating aggregate convergent
-validity as a licence for instance-level decisions.
+Four empirical findings structure the paper. First, predictive performance
+does not improve along the funnel, contrary to the pre-specified
+expectation: the primary metric is non-monotone, ranking skill falls
+monotonically, and the one normalisation under which late-funnel performance
+recovers does so only to a tenth of the available headroom. Second, that
+decline is a matter of composition rather than information. When all three
+stage models are scored on a single cohort of sessions that reach every
+stage, so that prevalence and labels are held identical, the decline
+disappears: conditioning on a customer's own prior behaviour, not the
+shortness of an early prefix, is what makes the later stages hard. Third,
+attribution mass migrates substantially across stages, with navigation
+behaviour peaking mid-funnel; a whole-session model fitted on the same data
+with the outcome event removed does not reproduce this structure, and
+instead concentrates attribution on how long and how fast a session ran.
+Fourth, aggregate agreement between explanation paradigms coexists with
+near-zero agreement about individual customers, which cautions against
+treating aggregate convergent validity as a licence for instance-level
+decisions.
+
+A fifth result concerns how these should be used. Ranking quality and
+targeting value are separate quantities: swept across contact budgets, the
+stage that ranks worst returns the most conversions per contact at budgets
+above roughly a twentieth of eligible sessions, while the stage that ranks
+best dominates when the budget is small. Which stage to target is therefore
+not answerable without naming the budget, and reporting a single
+threshold-selected operating point conceals this.
 
 The remainder of the paper is organised as follows. Section~\ref{sec:related}
 reviews sequential purchase prediction, explainable AI for consumer
@@ -222,7 +256,9 @@ Section~\ref{sec:framework} formalises the conceptual framework.
 Section~\ref{sec:methods} describes the data, the anti-leakage prefix
 protocol, the modelling, tuning and validation procedures.
 Section~\ref{sec:results} reports results against four pre-specified
-hypotheses. Section~\ref{sec:discussion} discusses implications, limitations
+hypotheses. Section~\ref{sec:decision-support} converts those results into
+decision-support terms and carries the paper's principal claim.
+Section~\ref{sec:discussion} discusses implications, limitations
 and threats to validity. Section~\ref{sec:conclusion} concludes.
 
 %==============================================================================
@@ -235,7 +271,9 @@ and threats to validity. Section~\ref{sec:conclusion} concludes.
 
 Purchase prediction has evolved from statistical choice models to
 architectures that exploit the temporal ordering of customer interactions.
-Early work emerged from session-based recommendation, where recurrent
+Early clickstream work established that browsing behaviour predicts purchase
+at the session level \citep{vandenpoel2005predicting}, and the sequential
+turn emerged from session-based recommendation, where recurrent
 architectures---LSTM and GRU networks---became the dominant approach for
 inferring intent from short, often anonymous sessions
 \citep{zhang2020learning, zhang2021recurrent, sheu2021knowledge}, with deep
@@ -376,6 +414,46 @@ faithful, stable and reproducible \emph{across} successive stages of an
 evolving journey---is not merely under-studied but largely unposed, since
 it presupposes a validation step that most applied work omits entirely.
 
+\subsection{Targeting value versus predictive accuracy}
+\label{sec:related-uplift}
+
+A separate literature has long argued that ranking customers by predicted
+outcome is the wrong basis for deciding whom to contact. \citet{ascarza2018retention}
+shows, in two field experiments, that targeting the customers most likely to
+churn can be ineffective or counterproductive, because propensity to
+experience an outcome is not the same as responsiveness to an intervention.
+Uplift modelling formalises the distinction by estimating the treatment
+effect directly rather than the outcome probability
+\citep{devriendt2018literature}, and a parallel strand argues that the
+evaluation metric must also change: \citet{verbraken2013novel} propose a
+profit-maximising criterion for churn classifiers,
+\citet{lemmens2020managing} show that optimising for profit rather than
+accuracy changes which customers a retention programme should target, and
+\citet{gubela2021uplift} develop value-driven metrics for uplift models in
+this journal.
+
+This paper is not an uplift study, and the distinction should be stated
+plainly because it bounds what the results mean. Estimating uplift requires
+randomised exposure to an intervention, and the observational clickstream
+used here contains none: no session was assigned to a treatment, so no
+treatment effect is identified. What the analysis of
+Section~\ref{sec:decision-support} supplies is the quantity that sits one
+step before uplift --- how much better than a blanket rule a stage-specific
+model can select sessions, measured in conversions per contact at a stated
+budget. That quantity is necessary but not sufficient for a targeting
+decision: a stage at which the model cannot beat contacting everyone cannot
+be worth targeting, whatever the uplift, whereas a stage at which it can may
+still fail on uplift grounds if the sessions it selects would have converted
+anyway. Two connections to the present work follow. First, the
+prevalence-normalised reporting argued for here is the same move the
+profit-driven literature makes for a different reason, and the two are
+complementary: normalising against chance identifies where a model has
+selective power, and uplift modelling then identifies whether exercising it
+changes behaviour. Second, the temporal constraint this paper imposes applies
+to uplift models as directly as to propensity models, since an uplift
+estimate computed from post-decision features is unusable for the same reason
+a retrospective attribution is.
+
 \subsection{Research gap and positioning}
 \label{sec:related-gap}
 
@@ -403,24 +481,29 @@ their three-way intersection is presently sparse in the applied literature.}
 Table~\ref{tab:positioning} summarises the comparison with the
 closest-related explanation methods.
 
-\begin{table*}[t]
+\begin{table}[t]
 \centering
 \caption{Positioning relative to sequence-aware explanation methods.}
 \label{tab:positioning}
-\small
-\begin{tabular}{@{}lllll@{}}
+\footnotesize
+% Fixed column widths: the validation column overflows a plain `l' spec and
+% was silently truncated in the rendered PDF.
+\begin{tabular}{@{}p{3.5cm}p{2.6cm}p{2.9cm}p{4.4cm}p{2.1cm}@{}}
 \toprule
 \textbf{Method} & \textbf{Attribution unit} & \textbf{Temporal constraint} &
 \textbf{Validation} & \textbf{Domain} \\
 \midrule
-TimeSHAP \citep{bento2021timeshap} & event/timestep/feature & none (full sequence) & -- & generic \\
-WindowSHAP \citep{nayebi2023windowshap} & time window & none (full series) & -- & clinical \\
-SurvSHAP(t) \citep{krzyzinski2022survshap} & feature over time & none (full trajectory) & -- & survival \\
+TimeSHAP \citep{bento2021timeshap} & event/timestep/ feature & none (full sequence) & none reported & generic \\
+\addlinespace
+WindowSHAP \citep{nayebi2023windowshap} & time window & none (full series) & none reported & clinical \\
+\addlinespace
+SurvSHAP(t) \citep{krzyzinski2022survshap} & feature over time & none (full trajectory) & none reported & survival \\
+\addlinespace
 \textbf{This work} & \textbf{feature, per funnel stage} & \textbf{stage cut-point (prefix only)} &
 \textbf{faithfulness, stability, seed and cross-paradigm consistency} & \textbf{e-commerce} \\
 \bottomrule
 \end{tabular}
-\end{table*}
+\end{table}
 
 %==============================================================================
 \section{Conceptual framework}
@@ -448,7 +531,7 @@ structurally, at the point where representations are constructed, rather
 than procedurally by convention within each analysis. The layers are
 formalised below.
 
-\begin{figure*}[t!]
+\begin{figure}[t!]
 \centering
 \includegraphics[width=\textwidth]{diag1_architecture.pdf}
 \caption{Architecture of the Funnel-Stage SHAP framework. Raw clickstream
@@ -457,7 +540,7 @@ into nested stage prefixes; an independent model is fitted per stage on its
 prefix features; explanations are computed per stage from the same prefix;
 and a validation layer tests faithfulness, stability and reproducibility.}
 \label{fig:architecture}
-\end{figure*}
+\end{figure}
 
 \subsection{Sessions as sequential behavioural processes}
 \label{sec:framework-sessions}
@@ -732,7 +815,8 @@ TreeSHAP is available. Class imbalance is handled by class weighting inside
 training folds only; SMOTE \citep{chawla2002smote} was available but is not
 used in reported runs.
 
-Probabilities are calibrated with isotonic regression fitted on a dedicated
+Probabilities are calibrated with isotonic regression
+\citep{niculescu2005predicting} fitted on a dedicated
 20\% slice of the \emph{training period}, drawn once per stage so that every
 seed and feature set is calibrated on identical rows. Calibrating on the
 validation month instead---the textbook location---raises expected
@@ -842,7 +926,9 @@ on identical test sets use the DeLong procedure
 \citep{delong1988comparing, sun2014fast}; PR-AUC differences use stratified
 paired bootstrap confidence intervals (2{,}000 resamples). The confirmatory
 family of nine stage-level contrasts is Holm-corrected
-\citep{holm1979simple}; with five seeds, the minimum attainable Wilcoxon
+\citep{holm1979simple}, a familywise procedure chosen over false-discovery
+control \citep{benjamini1995controlling} because the family is small and the
+conclusions are directional; with five seeds, the minimum attainable Wilcoxon
 $p$-value is 0.0625, so seed-level tests are reported descriptively and
 inference rests on the bootstrap intervals. All results are reported over
 the five frozen seeds as mean $\pm$ standard deviation.
@@ -924,7 +1010,7 @@ Logistic regression & $0.583 \pm 0.000$ & 0.879 & 0.203 & 0.032 \\
 Dataset~B stage models are reported in Table~\ref{tab:stage-models} and
 Figures~\ref{fig:curve} and~\ref{fig:stageperf}.
 
-\begin{table*}[t]
+\begin{table}[t]
 \centering
 \caption{Stage models on the temporal split (LightGBM, default
 hyperparameters, five seeds). Chance-level PR-AUC equals the prevalence
@@ -945,7 +1031,7 @@ S2 & 17884 & 0.0589 & $0.0834 \pm 0.0015$ & \bfseries 1.41 & $0.0260 \pm 0.0016$
 S3 & 2973  & 0.5214 & $0.5681 \pm 0.0041$ & \bfseries 1.09 & $0.0976 \pm 0.0086$ & 0.5695 & 0.017 \\
 \bottomrule
 \end{tabular}
-\end{table*}
+\end{table}
 
 \begin{figure}[htbp]
 \centering
@@ -1013,13 +1099,91 @@ mid-funnel and largest at intent. Both are properties of the same fitted
 models, and Section~\ref{sec:discussion-decline} interprets them together
 rather than adjudicating between them.
 
+A third caution is more consequential than either, and
+Section~\ref{sec:results-cohort} tests it rather than noting it: each stage is
+evaluated on a different population, so every number in
+Table~\ref{tab:stage-models} confounds what the model knows with who it is
+asked about.
+
+\subsection{Separating information from composition (fixed cohort)}
+\label{sec:results-cohort}
+
+The stage models are fitted and scored on the sessions that reach each stage.
+Those populations differ in size by more than an order of magnitude and in
+prevalence by roughly six-fold (Table~\ref{tab:stage-models}), so a
+cross-stage comparison mixes two mechanisms. The first is
+\emph{information}: a later stage observes a longer prefix and therefore has
+more to work with. The second is \emph{composition}: a later stage describes
+customers already selected by their own prior behaviour, and that selection
+removes much of the between-customer variance a model would otherwise
+exploit. Naming the confound does not resolve it, so we test it.
+
+The test holds the evaluation population fixed. Each stage model is trained
+exactly as before --- changing training would test a different artefact ---
+but all three are then scored on the same sessions: those reaching S3, which
+by construction have a defined prefix at every stage, intersected with the
+frozen test partition. The result is 821 sessions with one set of labels and
+one prevalence, $\pi = 0.463$, shared by all three rows of
+Table~\ref{tab:cohort}. This analysis is \textbf{exploratory}: the protocol
+specified conditional-population evaluation and did not anticipate a fixed
+cohort (Appendix~\ref{app:alignment}).
+
+\begin{table}[t]
+\centering
+\caption{Fixed-cohort evaluation. All three stage models are scored on the
+same 821 test sessions --- those that reach every stage --- so the labels and
+the prevalence ($\pi = 0.4629$) are identical across rows and lift is
+comparable between them. LightGBM, five seeds; $\pm$ is the standard
+deviation over seeds. Compare with Table~\ref{tab:stage-models}, where each
+row is a different population.}
+\label{tab:cohort}
+\small
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Stage} & \textbf{PR-AUC} & \textbf{PR Lift} & \textbf{ROC-AUC} \\
+\midrule
+S1 & $0.4846 \pm 0.0025$ & $1.047 \pm 0.005$ & $0.5155 \pm 0.0035$ \\
+S2 & $0.4776 \pm 0.0055$ & $1.032 \pm 0.012$ & $0.5172 \pm 0.0067$ \\
+S3 & $0.4935 \pm 0.0036$ & $1.066 \pm 0.008$ & $0.5468 \pm 0.0029$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The monotone decline does not survive. On the conditional populations lift
+runs $1.79 \to 1.41 \to 1.09$; on the fixed cohort it runs
+$1.047 \to 1.032 \to 1.066$, a range of 0.034 against seed standard
+deviations of 0.005--0.012. The ordering is no longer monotone and the intent
+stage is nominally highest rather than lowest. ROC-AUC behaves the same way:
+it fell from 0.641 to 0.570 across populations, and within the fixed cohort
+it rises slightly, from 0.516 to 0.547, S3's advantage over both earlier
+stages being about four times the largest seed standard deviation. The
+direction of the reversal is what the
+information account predicts --- a longer prefix should help a little --- and
+the magnitude is what makes the finding sober rather than encouraging: on a
+population this homogeneous, none of the three models separates buyers from
+non-buyers to any useful degree.
+
+Two consequences follow, and they pull in opposite directions. The first is
+that the headline decline of Section~\ref{sec:results-performance} is
+primarily a property of \emph{who is in the sample at each stage}, not of what
+the prefix contains. Sessions that reach a cart are, behaviourally, far more
+alike than sessions that merely begin, and homogeneity is hostile to ranking:
+there is less to rank. The decline is therefore real as a description of what
+a deployed stage model faces, because a deployed S3 model does face the S3
+population --- but it is not evidence that later prefixes are less
+informative, and any theoretical reading that treats it as such is
+overreaching. The second consequence is that H1's rejection stands. H1
+predicted that prevalence-normalised skill would improve along the funnel in
+operation, and it does not; the fixed-cohort result identifies the mechanism
+rather than reversing the verdict.
+
 \subsection{Feature-family ablation (H3)}
 \label{sec:results-ablation}
 
 Table~\ref{tab:ablation} reports the pre-specified nine-contrast family
 with stratified paired bootstrap intervals and Holm correction.
 
-\begin{table*}[t]
+\begin{table}[t]
 \centering
 \caption{Feature-family contrasts (PR-AUC differences, five seeds, 2{,}000
 stratified bootstrap resamples). ``Excludes 0'' refers to the 95\%
@@ -1043,7 +1207,7 @@ S3 & entropy+velocity vs.\ baseline   & +0.0156 & -0.0027 & +0.0346 & no  \\
 S3 & entropy+velocity beyond temporal & +0.0018 & -0.0045 & +0.0085 & no  \\
 \bottomrule
 \end{tabular}
-\end{table*}
+\end{table}
 
 Temporal pacing features contribute measurably at S1 and S2 (+0.0102 and
 +0.0120, intervals excluding zero; 8.2\% and 16.6\% relative to the
@@ -1156,68 +1320,97 @@ whole-session model, so we fitted one. This comparator is
 \textbf{exploratory}: the protocol specified a static contrast but not its
 form, and an earlier version of this analysis used the arithmetic mean of the
 stage shares, which is true by construction and tests nothing
-(Appendix~\ref{app:alignment}). The comparator uses the same LightGBM configuration and
-the same interventional TreeSHAP, aggregated over the entire session with no
-cut-point applied, evaluated on the same frozen temporal split and
-aggregated under the same reference grouping
+(Appendix~\ref{app:alignment}). The comparator uses the same LightGBM
+configuration and the same interventional TreeSHAP, aggregated over the
+entire session with no cut-point applied, evaluated on the same frozen
+temporal split and aggregated under the same reference grouping.
+
+The comparison must be chosen carefully, because the critique of
+whole-session practice bundles two defects that are not equally serious.
+The first is \emph{label leakage}: aggregating over a completed session
+counts the purchase event itself, so an event count encodes the outcome. The
+second is \emph{temporal invalidity}: even with the purchase removed, the
+features still describe behaviour occurring after the moment an intervention
+would have been taken. Only the second is the defect this paper is about, and
+only the second is committed by competent practice. We therefore fit both
+models and report the second as the comparator of record
 (Table~\ref{tab:whole-session}).
+
+The leakage model confirms that the first defect is trivial and uninteresting.
+Given the whole session including its purchase events, LightGBM attains a test
+PR-AUC of 0.9995 and a ROC-AUC of 0.9999 at a prevalence of 0.089: it reads
+the outcome off the session's own length. Treating that number as the
+whole-session benchmark would be a straw man, so it is not used further.
+
+Removing the purchase events leaves the fair comparator. Over the five frozen
+seeds it attains a test PR-AUC of $0.6086 \pm 0.0007$ and a ROC-AUC of
+$0.8925 \pm 0.0002$ on the same 38,715 test sessions at the same prevalence
+--- far above the 0.131 of the strongest stage model, and not attributable to
+leakage. The gap measures the value of information the stage
+models are forbidden to use: what a customer does \emph{after} the decision
+point is highly diagnostic of what they eventually do, which is precisely why
+retrospective explanations look so convincing and precisely why they cannot
+guide an intervention.
 
 \begin{table}[t]
 \centering
 \caption{Empirical whole-session model versus the stage-conditioned
-trajectory. Shares are proportions of mean absolute SHAP mass under the
-common reference grouping. ``Flattening'' is the stage-conditioned peak
-minus the whole-session share.}
+trajectory. Shares are proportions of mean absolute SHAP mass under the common
+reference grouping; the whole-session column is the fair comparator, from
+which purchase events have been removed so that no share reflects the label,
+and is reported as the mean $\pm$ standard deviation over the five frozen
+seeds. ``Flattening'' is the stage-conditioned peak minus that share, so a
+negative value means the static analysis assigns a family \emph{more} weight
+than any stage does. The six families do not sum to one: 24.1\% of the
+whole-session model's mass falls on features that exist only for a complete
+session and have no counterpart in the stage vocabulary. Sources:
+\texttt{whole\_session\_contrast\_gap30s200000\_nobuy.csv},
+\texttt{whole\_session\_shares\_gap30s200000\_nobuy\_seeds.csv}.}
 \label{tab:whole-session}
 \small
-\begin{tabular}{@{}lS[table-format=1.3]lS[table-format=1.3]S[table-format=1.3]@{}}
+\begin{tabular}{@{}lclcc@{}}
 \toprule
-\textbf{Family} & {\textbf{Stage peak}} & \textbf{at} &
-{\textbf{Whole-session}} & {\textbf{Flattening}} \\
+\textbf{Family} & \textbf{Stage peak} & \textbf{at} &
+\textbf{Whole-session} & \textbf{Flattening} \\
 \midrule
-Price context            & 0.437 & S1 & 0.002 & 0.435 \\
-Engagement / temporal    & 0.368 & S2 & 0.057 & 0.311 \\
-Navigation / categories  & 0.224 & S2 & 0.025 & 0.198 \\
-Hour of day              & 0.157 & S1 & 0.001 & 0.156 \\
-Product views / revisits & 0.192 & S1 & 0.109 & 0.083 \\
-Weekend indicator        & 0.020 & S3 & 0.000 & 0.019 \\
+Price context            & 0.437 & S1 & $0.073 \pm 0.006$ & $+0.364$ \\
+Navigation / categories  & 0.224 & S2 & $0.041 \pm 0.002$ & $+0.182$ \\
+Hour of day              & 0.157 & S1 & $0.038 \pm 0.000$ & $+0.119$ \\
+Product views / revisits & 0.192 & S1 & $0.150 \pm 0.003$ & $+0.043$ \\
+Weekend indicator        & 0.020 & S3 & $0.002 \pm 0.000$ & $+0.018$ \\
+Engagement / temporal    & 0.368 & S2 & $0.455 \pm 0.012$ & $-0.087$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Two results follow, and the first is about prediction rather than
-explanation. The whole-session model attains a test PR-AUC of 0.9995 and a
-ROC-AUC of 0.9999 at a prevalence of 0.089---effectively perfect
-separation, against 0.131 for the best stage model. That gap is not
-evidence that whole-session modelling is superior; it is the size of the
-leakage. A model permitted to count the events of a completed session can
-read the outcome off the session's own length, and its apparent excellence
-is an artefact of being asked a question that no deployed system is ever in
-a position to ask.
+The attribution profile shows where the fair comparator puts its weight, and
+the pattern is a redistribution rather than an averaging. Engagement and
+temporal behaviour --- dwell time, click velocity, inter-event gaps --- takes
+45.5\% of the whole-session model's explanatory mass, more than the 36.8\% it
+reaches at its own best stage. Every other family loses prominence. Price
+context, which carries 43.7\% at exploration, falls to 7.3\%. Navigation and
+category behaviour, which peaks at 22.4\% mid-funnel, falls to 4.1\%; hour of
+day falls from 15.7\% to 3.8\%. The remaining 24.1\% of the mass sits on
+features that exist only for a complete session --- total event and view
+counts, a purchase-intent composite, and session-level timing spreads ---
+which have no counterpart in the stage vocabulary and are therefore reported
+outside the six families rather than merged into them. Across seeds these
+shares are stable: the largest standard deviation of any family is 0.012.
 
-The attribution profile shows where that predictive weight sits. Three
-quarters of the whole-session model's explanatory mass falls on quantities
-that only exist once the session is over: total event and view counts carry
-57.5\% and a purchase-intent composite a further 18.6\%. What remains for
-the behavioural families the stage models rely on is correspondingly thin.
-Price context, which dominates the exploration stage at 43.7\%, receives
-0.2\%. Navigation and category behaviour, which peaks at 22.4\% mid-funnel,
-receives 2.5\%. The static analysis does not merely average the trajectory
-into a flat value, as an earlier and weaker version of this comparison
-assumed; it reallocates attention almost entirely onto session-completion
-artefacts and reports the behavioural drivers as near-irrelevant.
-
-\textbf{RQ4 is answered affirmatively, with a qualification about the
-comparison itself.} Four features in the whole-session vocabulary
-(\texttt{n\_events}, \texttt{n\_views}, \texttt{inter\_event\_std\_s} and
-\texttt{purchase\_intent\_score}) fall outside the reference grouping, which
-is derived from the earliest and coarsest stage, so they are reported as
-their own families rather than merged into the six above. Those four are
-precisely the ones carrying the leaked signal, so the qualification does not
-weaken the finding; but it does mean the share columns are not a partition
-of a common vocabulary, and the flattening column should be read as the loss
-of a family's stage-specific prominence rather than as a conserved transfer
-of mass.
+\textbf{RQ4 is answered affirmatively, and the mechanism is more specific than
+the question presumed.} A static analysis does not report the stage
+trajectory's average, as an earlier and weaker version of this comparison
+assumed; it concentrates attribution on how long and how fast a session ran,
+because over a whole session those quantities absorb the signal that
+stage-conditioned features carry separately. The consequence for practice is
+direct: a manager reading the static analysis would conclude that engagement
+intensity is the dominant lever at every point in the journey, and would not
+learn that price sensitivity dominates at exploration or that category
+exploration dominates mid-funnel. One qualification limits how the columns may
+be read. The share columns are not a partition of a common vocabulary, since
+the whole-session model has features the stage grouping does not cover, so
+``flattening'' should be read as the change in a family's prominence rather
+than as a conserved transfer of mass.
 
 \subsection{Explanation quality (RQ3)}
 \label{sec:results-quality}
@@ -1225,7 +1418,7 @@ of mass.
 Table~\ref{tab:quality} and Figure~\ref{fig:quality} report the validation
 layer.
 
-\begin{table*}[t]
+\begin{table}[t]
 \centering
 \caption{Explanation quality by stage. Thresholds (faithfulness $>0.5$,
 seed Spearman $>0.6$) were fixed before any result was computed. Lipschitz
@@ -1245,7 +1438,7 @@ S2 & $0.494 \pm 0.179$ & \fail & 0.1440 & 0.3820 & 0.073 / 0.013 & 0.966 / 0.943
 S3 & $0.565 \pm 0.169$ & \pass & 0.3495 & 0.5898 & 0.028 / 0.010 & 0.943 / 0.886 & \pass \\
 \bottomrule
 \end{tabular}
-\end{table*}
+\end{table}
 
 \begin{figure}[htbp]
 \centering
@@ -1262,11 +1455,17 @@ shows all three stages clustered in a narrow band around the threshold
 while the consistency panel shows all three pinned near the ceiling, so the
 quality profile is high-reproducibility, moderate-faithfulness everywhere,
 rather than degrading with depth in the funnel. \emph{Faithfulness} sits
-between 0.494 and 0.571, and S2 misses the pre-specified bar; we report
-this as a failure rather than rounding it up. The magnitudes carry their
-own message: the explanations capture a substantial but not exhaustive
-portion of the models' mechanisms, and should be read as informative
-approximations rather than complete accounts.
+between 0.494 and 0.571, and S2 misses the pre-specified bar; we record this
+as a failure because the threshold was fixed in advance, and we decline to
+interpret it. The gap between S2 and the pre-set bar is 0.006 against a
+dispersion of 0.179, and the gap between S2 and the best stage is 0.077,
+roughly four tenths of a standard deviation. Nothing in these three numbers
+distinguishes the stages, and a reading in which consideration is
+``the stage with unfaithful explanations'' would be reading noise. What the
+magnitudes do support is a statement about all three stages together: the
+explanations capture a substantial but not exhaustive portion of the models'
+mechanisms, and should be read as informative approximations rather than
+complete accounts.
 
 \emph{Deletion and insertion} behave as required at every stage: removing
 top positively-attributed features degrades the prediction monotonically,
@@ -1278,9 +1477,9 @@ distributions.
 \emph{Stability passes at every stage.} The local Lipschitz estimate bounds
 attribution change at a maximum ratio of 0.073 (S2), with means near 0.01:
 perturbing the input moves the explanation by a small fraction of the
-perturbation itself. Notably, S2---weakest on faithfulness---is not
-unstable; its explanations are consistent and robust, merely less tethered
-to the model's actual sensitivity than at the other stages.
+perturbation itself. The estimate rests on 25 instances per stage, which is
+adequate for establishing that attributions are not wildly sensitive and too
+few to support fine comparisons between stages; only the former is claimed.
 
 \emph{Reproducibility passes decisively}, with worst-pair cross-seed
 correlations of 0.886 or higher against a threshold of 0.6. This is what
@@ -1288,12 +1487,14 @@ licenses Figure~\ref{fig:migration}: the migration trajectory survives
 reseeding. The mild decline toward later stages tracks their smaller
 evaluation populations.
 
-Collectively, the layer supports using the trajectories---while flagging
-S2, which combines the weakest predictive lift, the only faithfulness miss,
-and (below) the weakest per-instance cross-paradigm agreement.
-Consideration is the stage at which this framework's explanations deserve
-the most caution, and the paper says so plainly rather than reporting
-stage-averaged explanation quality.
+Collectively, the layer supports using the trajectories. It also flags S2,
+though on narrower grounds than the pass/fail column suggests: what
+distinguishes consideration is the weakest predictive lift and, as
+Section~\ref{sec:results-h4} shows, the only negative per-instance
+cross-paradigm agreement. Its faithfulness is not distinguishable from the
+other stages'. Consideration is where this framework's explanations deserve
+the most caution, and stating which measures support that and which do not is
+the point of reporting quality per stage rather than stage-averaged.
 
 \subsection{Cross-paradigm agreement (H4)}
 \label{sec:results-h4}
@@ -1389,7 +1590,7 @@ All three searches selected the minimum tree count in the space with strong
 regularisation---shallow trees at S1 and S3, a slow learning rate at
 S2---consistent with a drift-prone temporal split rewarding conservative
 models; that the largest gain lands at the underpowered S3 fits the same
-reading, and even tuned it remains the weakest stage.
+reading, and even tuned it remains the weakest stage on lift.
 
 \paragraph{Split protocol} On the grouped split, which is identity-clean
 but not time-ordered, lift falls $1.98 \to 1.53 \to 1.15$. The monotone
@@ -1443,7 +1644,7 @@ who weights confirmatory and exploratory evidence differently should weight
 this section accordingly; Appendix~\ref{app:alignment} lists every such
 addition in one place.
 
-\begin{figure*}[htbp]
+\begin{figure}[htbp]
 \centering
 \includegraphics[width=\textwidth]{fig9_decision_support.pdf}
 \caption{Decision-support architecture. Behavioural events are ordered into a
@@ -1456,7 +1657,7 @@ system terminates at the third box, yielding a score with no reason and no
 stage label, which is sufficient to rank customers and insufficient to choose
 a lever.}
 \label{fig:decision-support}
-\end{figure*}
+\end{figure}
 
 \subsection{Why prediction alone is not decision support here}
 \label{sec:why-not-prediction}
@@ -1468,7 +1669,7 @@ one comparator that matters operationally: the trivial rule that flags every
 session. That rule costs nothing to build, so a model earns its place only by
 beating it. Its $F_1$ is $2\pi_s/(1+\pi_s)$ at prevalence $\pi_s$.
 
-\begin{table*}[htbp]
+\begin{table}[htbp]
 \centering
 \caption{Error structure at the operating threshold (seed 42, test partition)
 against the always-positive rule. \emph{Flag rate} is the share of sessions
@@ -1489,33 +1690,34 @@ S2 & 17884 & 0.0589 & 0.243 & 398  & 3957 & 0.091 & 0.378 & 0.1472 & 0.1113 & +0
 S3 & 2973  & 0.5214 & 0.990 & 1542 & 1402 & 0.524 & 0.995 & 0.6862 & 0.6854 & +0.0008 & 0.91 \\
 \bottomrule
 \end{tabular}
-\end{table*}
+\end{table}
 
-The S3 row is the study's sharpest decision-support finding, and it is
-negative. At its own selected operating point the intent-stage model refers
-99.0\% of sessions for intervention and achieves an $F_1$ of 0.6862 against
-0.6854 for a rule that refers everyone: a margin of 0.0008. Read as a
-targeting system, the model at the cart stage is operationally
-indistinguishable from a blanket policy. Its apparently strong PR-AUC of 0.568
-is very largely prevalence, and its high $F_1$ is an artefact of optimising a
-prevalence-sensitive criterion on a population that is already half
-purchasers.
-
-The early stages behave in the opposite way. S1 refers 17.4\% of sessions and
+The S3 row is arresting. At its own $F_1$-selected operating point the
+intent-stage model refers 99.0\% of sessions for intervention and achieves an
+$F_1$ of 0.6862 against 0.6854 for a rule that refers everyone: a margin of
+0.0008. The early stages behave differently. S1 refers 17.4\% of sessions and
 beats the trivial rule by 0.0647 $F_1$ points; S2 refers 24.3\% and beats it
 by 0.0359. These are modest margins, and the cost side is real --- roughly six
 false positives per true positive at S1 and ten at S2 --- but they are
-\emph{selective}, which is the property a targeting system needs. The
-practical inversion is therefore stark. The stage at which conversion
-prediction is most commonly deployed is the stage at which it contributes
-least over a blanket rule; the stage at which the model is genuinely
-selective is the earliest one, where intervention is also least costly and
-most reversible.
+\emph{selective}, which is the property a targeting system needs.
 
-This is precisely the divergence that motivates a decision-support framing
-rather than a purely predictive one. Any of PR-AUC, $F_1$ or accuracy read in
-isolation would have ranked S3 the strongest stage. Only the comparison
-against a decision-relevant null exposes it as the weakest.
+The reading this invites is that the cart-stage model is operationally
+indistinguishable from a blanket policy, and that reading does not survive
+scrutiny. $F_1$ maximisation is prevalence-sensitive: as $\pi_s$ rises toward
+one half, the criterion is increasingly satisfied by flagging everything, and
+$\pi_{S3} = 0.521$. The 99\% flag rate is therefore at least partly a property
+of the threshold rule rather than of the model, and a conclusion about
+whether late-stage targeting is worth doing cannot rest on a single
+$F_1$-selected point. Section~\ref{sec:decision-economics} tests the claim
+across the operating range instead.
+
+What survives the operating point is the narrower observation that decision
+value and ranking quality are not the same quantity. Any of PR-AUC, $F_1$ or
+accuracy read in isolation would have ranked S3 the strongest stage; the
+comparison against a decision-relevant null shows that at the threshold a
+standard selection rule chooses, it contributes almost nothing over flagging
+everyone. That is a reason to select thresholds by decision criteria rather
+than by $F_1$, which is the point of a decision-support framing.
 
 \subsection{From explanation to intervention}
 \label{sec:explanation-to-intervention}
@@ -1531,7 +1733,7 @@ explanation, not effects estimated by it. Second, no intervention in this
 table has been tested --- the study is offline, and the column is a design
 implication, not evidence of efficacy.
 
-\begin{table*}[htbp]
+\begin{table}[htbp]
 \centering
 \caption{Decision-support implications by funnel stage. Attribution shares are
 grouped mean $|$SHAP$|$ from Table~\ref{tab:migration}; predictive standing is
@@ -1550,8 +1752,8 @@ S1 \newline exploration &
 Price context (43.7\%), product views (19.2\%) &
 Price and browsing breadth carry most attribution; the model is selective
 (flag rate 0.174, $F_1$ margin $+0.065$) &
-This is where targeting adds most over a blanket rule, and where the
-explanation is most faithful ($\rho = 0.571$) &
+This is where targeting adds most per contact under a small budget
+(incremental precision 0.215 at a 1\% flag rate) &
 The attributed features are \texttt{price\_max}, \texttt{price\_mean} and
 \texttt{n\_unique\_products}, so the lever is the \emph{price range and
 breadth of the first two product impressions}: seeding entry results with a
@@ -1572,33 +1774,33 @@ The attributed features are \texttt{category\_entropy} and
 comparison}, not within-category refinement: a persistent side-by-side
 compare tray spanning the categories already visited, rather than more
 filters inside one category &
-$\approx$10 false positives per true positive; weakest faithfulness of the
-three stages ($\rho = 0.494$, below the pre-set 0.5), so this is the stage
-whose stated reason should carry least weight \\
+$\approx$10 false positives per true positive; the only negative
+per-instance cross-paradigm agreement ($-0.018$), so this is the stage whose
+stated reason should carry least weight \\
 \addlinespace
 S3 \newline intent &
 Engagement (33.8\%), price returns (37.9\%) &
 Attribution is stable but predictive skill is near its floor
 (lift 1.09, ROC-AUC 0.570) &
-Propensity-based targeting is not defensible here: the operating point refers
-99\% of sessions &
-Blanket or margin-based rules rather than model-driven selection; reserve
-model capacity for earlier stages &
-Acting on predicted propensity at this stage is close to acting at random
-while incurring model-governance cost \\
+Ranking skill is lowest here, yet at budgets of 5\% or more this stage
+returns the most conversions per contact (Table~ef{tab:sweep}) &
+Cart-recovery and price-return prompts, applied under an explicit budget
+rather than at an $F_1$-selected threshold &
+Selecting the threshold by $F_1$ flags 99\% of sessions and adds nothing
+over a blanket rule; the value depends entirely on the budget chosen \\
 \bottomrule
 \end{tabular}
-\end{table*}
+\end{table}
 
 Three implications follow that a whole-session analysis could not have
 produced. First, the navigation peak at consideration (3.5\%, 22.4\%, 7.4\%
-across stages) identifies a specific intervention window; a static attribution
-assigns this family a flat 11.1\% and would place the lever nowhere in
-particular. Second, the faithfulness profile is stage-dependent
-(Table~\ref{tab:quality}), so the confidence attached to an explanation should
-vary by stage: S2 is simultaneously the stage where the explanation points
-most clearly to a lever and the stage where the explanation is least faithful,
-which is an uncomfortable but actionable combination. Third, the near-zero
+across stages) identifies a specific intervention window, whereas the fitted
+whole-session comparator of Section~\ref{sec:results-rq4} assigns the family
+4.1\% and reports no window at all. Second, the explanation-quality profile does \emph{not} differ
+detectably across stages (Section~\ref{sec:results-quality}): the three
+faithfulness values lie within a fifth of a standard deviation of one another,
+so a system should attach the same --- moderate --- confidence at every stage
+rather than a stage-varying one. Third, the near-zero
 per-instance agreement between the tree and recurrent arms
 (Section~\ref{sec:results-h4}) bears directly on interface design: a system
 that surfaces per-customer explanations to an analyst is making a claim that
@@ -1628,7 +1830,7 @@ the \emph{incremental} precision, $\text{precision} - \pi_s$, and the
 break-even becomes $u^{*}_{\text{inc}} = c / \big( (\text{precision} - \pi_s)
 \cdot m \big)$. Table~\ref{tab:economics} reports both.
 
-\begin{table*}[htbp]
+\begin{table}[htbp]
 \centering
 \caption{Decision economics at each stage's operating point, over the five
 frozen seeds. ``Contacts per incremental conversion'' is
@@ -1653,62 +1855,122 @@ S2 & 0.0589 & 0.0871 & $+0.0281 \pm 0.0035$ & 8.03 & 35.5 & 31--39 \\
 S3 & 0.5214 & 0.5253 & $+0.0039 \pm 0.0035$ & 1.11 & 256.9 & 104--34{,}751 \\
 \bottomrule
 \end{tabular}
-\end{table*}
+\end{table}
 
-The final two columns carry the argument. To obtain one conversion beyond
-what a blanket policy already delivers, an organisation must contact roughly
-15 sessions at exploration and 36 at consideration. Both figures are stable
-across seeds, and both incremental precisions sit eight or more standard
-deviations from zero.
+The final two columns carry the argument at these operating points. To obtain
+one conversion beyond what a blanket policy already delivers, an organisation
+must contact roughly 15 sessions at exploration and 36 at consideration. Both
+figures are stable across seeds, and both incremental precisions sit eight or
+more standard deviations from zero.
 
-S3 is different in kind, not merely in degree. Its incremental precision is
-$+0.0039 \pm 0.0035$, barely one standard deviation from zero, and the
+S3 is different in kind at its own operating point. Its incremental precision
+is $+0.0039 \pm 0.0035$, barely one standard deviation from zero, and the
 per-seed contact requirement ranges from 104 to over 34{,}000. The honest
 statement is therefore not that cart-stage targeting costs 257 contacts per
-incremental conversion but that \emph{its incremental value is not
-distinguishable from zero, so the cost per incremental conversion is unbounded
-above}. An earlier version of this analysis reported a single-seed point
-estimate of 417, which conveyed a precision the five-seed evidence does not
-support; the instability is the finding, and it is reported rather than
-averaged away.
+incremental conversion but that \emph{at the $F_1$-selected threshold its
+incremental value is not distinguishable from zero, so the cost per
+incremental conversion is unbounded above}. An earlier version of this
+analysis reported a single-seed point estimate of 417, which conveyed a
+precision the five-seed evidence does not support; the instability is the
+finding, and it is reported rather than averaged away.
 
-The ordering, by contrast, is robust: targeting at exploration is worth
-roughly an order of magnitude more per contact than at consideration and is
-not comparable at all to intent. This ordering depends only on measured
-precision and prevalence, so it holds whatever the retailer's true $c$ and
-$m$.
+\paragraph{The operating point is doing much of the work.} Every figure above
+is conditional on the threshold rule, and at S3 that rule flags 99\% of
+sessions. That is a near-blanket policy, and incremental value over a blanket
+rule necessarily approaches zero as the flag rate approaches one, whatever
+the model. Whether late-stage targeting is worthwhile is
+therefore a question the $F_1$ threshold cannot answer, and we answer it by
+sweeping the flag rate directly. Table~\ref{tab:sweep} reports incremental
+precision at each of a range of budgets, holding the models fixed. This sweep
+is \textbf{exploratory}; the protocol did not specify it.
 
-\paragraph{Does tuning rescue the intent stage?} The headline models use
-default hyperparameters, and a natural objection is that a tuned model might
-recover decision value at S3, where tuning raises PR-AUC most (0.568 to
-0.600). It does not. Refitting with the Optuna-selected configurations moves
-S3's incremental precision from $+0.0039 \pm 0.0035$ to $+0.0017 \pm 0.0017$
---- that is, \emph{further} toward zero, with one of the five seeds falling at
-or below chance entirely, so the mean contact requirement rises from 257 to
-roughly 600 and its upper range becomes unbounded. Tuning simultaneously
-improves S3's ranking metrics (ROC-AUC 0.570 to 0.601) and degrades its
-targeting value.
+\begin{table}[htbp]
+\centering
+\caption{Incremental precision (precision among the top-scoring sessions minus
+the stage prevalence) as a function of the share of sessions flagged, over the
+five frozen seeds. A flag rate is a budget: it fixes how many sessions the
+organisation can contact. Values are means $\pm$ standard deviations across
+seeds. At a flag rate of 1 every stage is exactly zero by construction, since
+flagging everything is the blanket rule. Source:
+\texttt{flag\_rate\_sweep\_gap30s200000.csv}.}
+\label{tab:sweep}
+\small
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Flag rate} & \textbf{S1 (exploration)} & \textbf{S2 (consideration)} &
+\textbf{S3 (intent)} \\
+\midrule
+1\%  & $0.2148 \pm 0.0022$ & $0.0729 \pm 0.0116$ & $0.0320 \pm 0.0767$ \\
+2\%  & $0.1692 \pm 0.0094$ & $0.0534 \pm 0.0130$ & $0.0719 \pm 0.0397$ \\
+5\%  & $0.1282 \pm 0.0030$ & $0.0451 \pm 0.0065$ & $0.1162 \pm 0.0237$ \\
+10\% & $0.0930 \pm 0.0016$ & $0.0376 \pm 0.0077$ & $\mathbf{0.1137 \pm 0.0130}$ \\
+20\% & $0.0615 \pm 0.0011$ & $0.0325 \pm 0.0032$ & $\mathbf{0.0743 \pm 0.0123}$ \\
+30\% & $0.0460 \pm 0.0007$ & $0.0297 \pm 0.0011$ & $\mathbf{0.0632 \pm 0.0112}$ \\
+50\% & $0.0263 \pm 0.0008$ & $0.0191 \pm 0.0008$ & $\mathbf{0.0454 \pm 0.0047}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
 
-This is the paper's central argument appearing inside its own robustness
-check. Optimising a threshold-free ranking criterion produced a model that
-orders sessions better and separates them from chance no better, because at a
-prevalence of 0.52 there is almost no separation available to find. Two
-consequences follow. First, the hyperparameter choice is not what sustains
-the S3 conclusion: the conclusion is stronger under tuning, not weaker, so
-nothing in the decision-support argument rests on the use of defaults.
-Second, the episode is itself evidence for the paper's thesis, since a
-practitioner who tuned for PR-AUC and stopped there would have concluded that
-the intent stage had improved. At S2, by contrast, tuning does help on both
-counts (contacts fall from 35.5 to 25.6), which is what makes the S3 result
-interpretable rather than a general artefact of tuning.
+The sweep changes the practical conclusion. At a 10\% budget the intent stage
+delivers the largest incremental precision of the three
+($0.1137 \pm 0.0130$, against $0.0930 \pm 0.0016$ at exploration and
+$0.0376 \pm 0.0077$ at consideration), and it remains the highest at every
+budget from 5\% upward. Converted to contacts, one conversion beyond the
+blanket rule costs 8.8 contacts at intent, 10.8 at exploration and 26.6 at
+consideration. The claim that late-stage targeting adds nothing is an artefact
+of the $F_1$ threshold and is withdrawn.
+
+Two things do survive, and they are not the same claim. The first is that
+ranking skill declines: top-decile lift falls monotonically from
+$2.27\times$ at exploration to $1.64\times$ and $1.22\times$, so the intent
+model orders sessions least well of the three even where it targets best. The
+two facts are compatible because lift is measured against a prevalence that
+differs six-fold, while incremental precision is measured in conversions per
+contact, which is what a budget buys. The second is that exploration dominates
+at small budgets: at a 1\% flag rate its incremental precision is
+$0.2148 \pm 0.0022$, roughly seven times the intent stage's, and its estimate
+is far more stable --- the intent stage's standard deviation at that budget
+($\pm 0.0767$) exceeds its mean, because a 1\% flag over a 2,973-session test
+partition selects only about thirty sessions.
+
+The managerial statement the evidence supports is therefore conditional on
+budget rather than universal. Under a scarce contact budget, target early:
+exploration is both the most selective stage and the one where intervention
+is cheapest and most reversible. Under a budget large enough to reach a tenth
+or more of eligible sessions, the intent stage is the most efficient place to
+spend the marginal contact, notwithstanding that its ranking is the weakest.
+The consideration stage is the least attractive at every budget tested, which
+is consistent with its anomalous behaviour throughout
+(Section~\ref{sec:s2-problem}).
+
+\paragraph{Does tuning change the picture?} The headline models use default
+hyperparameters, and a natural objection is that a tuned model would behave
+differently, particularly at S3 where tuning raises PR-AUC most (0.568 to
+0.600). At the $F_1$-selected operating point it does not help: refitting with
+the Optuna-selected configurations moves S3's incremental precision from
+$+0.0039 \pm 0.0035$ to $+0.0017 \pm 0.0017$, so the mean contact requirement
+rises from 257 to roughly 600 with an unbounded upper range, even though
+ROC-AUC improves from 0.570 to 0.601. At S2, tuning helps on both counts
+(contacts fall from 35.5 to 25.6).
+
+The divergence is instructive but narrower than it first appears. Because it
+is measured at a threshold that flags 99\% of S3 sessions, it shows that
+tuning for a ranking criterion does not fix a badly chosen operating point ---
+not that tuning is harmful. The substantive point stands in either reading:
+a practitioner who tuned for PR-AUC and stopped there would have concluded
+that the intent stage had improved as a targeting system, and would have had
+no evidence for it. What the flag-rate sweep adds is that the operating point,
+not the hyperparameters, is what such a practitioner should have examined
+first.
 
 Two further boundaries on this calculation should be stated rather than left implicit.
 First, it assumes the intervention's uplift $u$ does not itself vary by stage.
 That is unlikely to hold --- a customer at the cart may be more responsive to
-a well-timed nudge than a browser at entry --- and if $u$ rises steeply enough
-with intent it could offset the 29-fold gap. The calculation identifies how
-large that compensating effect would have to be, which is a testable
-quantity, rather than assuming it away. Second, the analysis treats all
+a well-timed nudge than a browser at entry --- and a stage-varying $u$ would
+shift the comparison in Table~\ref{tab:sweep} by a factor the data cannot
+supply. The calculation identifies how large that compensating effect would
+have to be, which is a testable quantity, rather than assuming it away.
+Second, the analysis treats all
 conversions as equal in value; if cart-stage sessions carry systematically
 higher basket values, margin $m$ is itself stage-dependent and the comparison
 would need to be re-weighted. Neither correction is available in these data,
@@ -1720,14 +1982,23 @@ and both are recorded as such.
 The framework's value is not that it improves conversion prediction --- it
 does not, and the tuning analysis shows the headline numbers are close to
 what default hyperparameters already achieve. Its value is that it makes
-visible three things a conventional pipeline hides: that predictive skill and
+visible four things a conventional pipeline hides: that predictive skill and
 prevalence move together and must be separated before a stage is judged; that
+much of the apparent cross-stage difference is composition rather than
+information, so a fixed-cohort check belongs in any funnel evaluation; that
 attribution mass migrates, so the same model gives different advice at
 different points in the journey; and that explanation quality is itself a
-measurable property that varies by stage. An organisation adopting this
-framework should expect to conclude, as we do here, that some stages do not
-warrant model-driven targeting at all. That is a decision-support result, and
-a conventional evaluation would not have surfaced it.
+measurable property that varies by stage.
+
+The operational conclusion is a rule for choosing operating points rather
+than a ranking of stages. Selecting a threshold by $F_1$ produced a
+cart-stage policy that flagged 99\% of sessions and added nothing over
+flagging everyone; selecting it by budget produced the most efficient
+targeting of the three stages at that same model. An organisation adopting
+this framework should therefore expect to conclude, as we do here, that the
+question ``which stage should we target?'' is under-specified until the
+contact budget is named. That is a decision-support result, and a
+conventional evaluation would not have surfaced it.
 
 %==============================================================================
 \section{Discussion}
@@ -1748,26 +2019,48 @@ These are not in conflict: at a base rate of 52\% a model can place many
 converters above many non-converters while ordering them poorly, because
 the bar chance already clears is high. The interpretation below concerns
 ranking skill, which is the quantity an intervention system actually
-consumes when it decides whom to target. The pattern admits a selection
-reading: each successive stage conditions on an increasingly committed
-population, and conditioning on commitment removes precisely the
-behavioural variance that discriminates purchasers from non-purchasers.
-Early in the journey, broad exploratory signals separate populations that
-differ widely in intent; by the time a cart exists, nearly everyone
-remaining looks intent, and the residual outcome uncertainty is governed by
-factors the clickstream does not observe---price comparison off-site,
-household deliberation, payment friction. On this reading, the framework's
-falsifiable prediction is that covariates capturing off-stream context
-should recover discrimination at S3 where within-stream behaviour cannot;
-testing it requires data this study does not possess and is flagged as
-future work.
+consumes when it decides whom to target.
 
-The finding inverts a common operational assumption: the stages where
-prediction is conventionally deployed (late, high-intent) are the stages
-where the model adds least ranking skill over the base rate, while the
-stages where intervention is most valuable (early) are where relative skill
-is highest. Prevalence-normalised reporting is what makes this visible;
-absolute PR-AUC alone would have told the opposite, wrong, story.
+The pattern admits a selection reading: each successive stage conditions on
+an increasingly committed population, and conditioning on commitment removes
+precisely the behavioural variance that discriminates purchasers from
+non-purchasers. Early in the journey, broad exploratory signals separate
+populations that differ widely in intent; by the time a cart exists, nearly
+everyone remaining looks intent, and the residual outcome uncertainty is
+governed by factors the clickstream does not observe---price comparison
+off-site, household deliberation, payment friction.
+
+Unlike most such readings, this one is testable within the present data, and
+Section~\ref{sec:results-cohort} tests it. If the decline were a property of
+what the prefix contains, it would persist when every model is scored on the
+same customers; if it were a property of who remains, it would disappear. It
+disappears. On a single cohort of sessions reaching every stage, lift is flat
+to within roughly three seed standard deviations
+($1.047 \to 1.032 \to 1.066$) and ROC-AUC rises slightly rather than falling.
+The selection account is therefore supported and the alternative---that later
+prefixes carry less usable information---is not. Two implications follow. The
+theoretical one is that the funnel effect documented here belongs to the
+sampling structure of staged journeys rather than to the information content
+of behavioural sequences, which narrows what may be generalised from it: any
+setting in which stages are defined by customer self-selection should show
+the same pattern, and a setting in which stages are assigned exogenously
+should not. The operational one is that the decline is nonetheless what a
+deployed system experiences, because a deployed intent-stage model is asked
+about the intent-stage population and no other. The framework's remaining
+falsifiable prediction is unchanged: covariates capturing off-stream context
+should recover discrimination at S3 where within-stream behaviour cannot.
+Testing it requires data this study does not possess.
+
+The finding qualifies a common operational assumption without reversing it.
+The stages where prediction is conventionally deployed (late, high-intent)
+are the stages where a model adds least ranking skill over the base rate, and
+prevalence-normalised reporting is what makes this visible; absolute PR-AUC
+alone would have told the opposite, wrong, story. But weak ranking is not the
+same as weak decision value, and Section~\ref{sec:decision-economics} shows
+that at budgets above roughly a twentieth of eligible sessions the intent
+stage yields the most conversions per contact of the three despite ranking
+worst. The conclusion an organisation should draw is about \emph{how to
+choose an operating point}, not about which stage to abandon.
 Figure~\ref{fig:contributions} traces this logic for all four research
 questions, mapping each from the methodological component that makes it
 answerable, through the empirical finding, to the theoretical claim it
@@ -1801,8 +2094,8 @@ regimes \citep{bucklin2003model, lemon2016understanding}. The mid-funnel
 peak of navigation entropy is the sharpest illustration---comparison
 behaviour is maximally informative exactly when the staged account says
 customers compare---and it is structurally invisible to whole-session
-attribution, which assigns the family 2.5\% while resting three quarters of
-its own explanatory weight on whole-session volume
+attribution, which assigns the family 4.1\% while placing 45.5\% of its own
+explanatory weight on how long and how fast the session ran
 (Section~\ref{sec:results-rq4}).
 The coexistence of high attribution share with negligible unique predictive
 contribution (Section~\ref{sec:results-ablation}) is itself informative:
@@ -1852,12 +2145,18 @@ Consideration (S2) is where the attribution structure is most distinctive:
 navigation entropy rises from 3.5\% to 22.4\% of attribution mass and falls
 again to 7.4\%, the single non-monotone trajectory in the study and the one
 that most clearly identifies an intervention window. It is also the stage at
-which the explanations are least trustworthy on two independent measures.
-Faithfulness is 0.494, the only value below the pre-registered threshold of
-0.5. Per-instance cross-paradigm agreement is $-0.018$, the only negative
-value, with no concept holding a consistent sign across seeds. And S2 carries
-the weakest predictive standing of the three on lift (1.41) while requiring
-roughly 31 contacts per incremental conversion.
+which the explanations are least trustworthy, though on one measure rather
+than the two an earlier reading claimed. Per-instance cross-paradigm
+agreement is $-0.018$, the only negative value, with no concept holding a
+consistent sign across seeds. Faithfulness is 0.494, nominally below the
+pre-registered threshold of 0.5, but the shortfall is 0.03 of a standard
+deviation and the gap to the best stage four tenths of one
+(Section~\ref{sec:results-quality}); it is recorded as a pre-specified
+failure and not treated as evidence. What does distinguish S2 substantively
+is its predictive standing: the weakest lift of the three (1.41), the lowest
+incremental precision at every contact budget tested
+(Table~\ref{tab:sweep}), and roughly 31 contacts per incremental conversion
+at its own operating point.
 
 The stage where the explanation is most informative is therefore the stage
 where it is least reliable. Three readings are compatible with the evidence
@@ -1929,7 +2228,7 @@ model as a whole.
 \subsection{Implications for decision support and practice}
 \label{sec:discussion-practice}
 
-Three implications follow for intelligent decision support. First,
+Four implications follow for intelligent decision support. First,
 prediction and explanation should share informational constraints by
 architecture, not convention: an explanation layer bolted onto a
 whole-session model can cite behaviour that postdates the decision point,
@@ -1937,9 +2236,13 @@ and no amount of visualisation repairs that. Second, intervention design
 can key on the stage-conditioned profiles: at exploration, price context
 and browsing breadth dominate, favouring assortment and price-transparency
 interventions; at consideration, navigation and engagement dominate,
-favouring comparison support; at intent, engagement consolidates, and the
-model's residual skill is thin---interventions there are better justified
-by margin arithmetic than by predicted propensity. Third, explanation
+favouring comparison support; at intent, engagement consolidates and
+attribution stabilises. Third, an operating point is a decision variable and
+should be reported as one. The same intent-stage model looks worthless or
+best-in-class depending on whether its threshold is chosen by $F_1$ or by
+budget, so a decision-support system should expose the flag rate to the
+manager rather than fix it inside a model-selection step. Fourth,
+explanation
 validation belongs in deployment pipelines: the per-stage quality table is
 cheap to compute, and in these data it would have flagged S2 as the stage
 where explanations deserve least trust---something no aggregate metric
@@ -2007,7 +2310,16 @@ on the already-selected model, but it is a double use, and a stricter
 design would reserve a separate partition for each. More fundamentally, the
 framework is predictive, not causal: SHAP quantifies contribution to model
 predictions, not causal influence on purchasing, so the trajectories
-describe how predictive evidence evolves, not how motives do. Finally,
+describe how predictive evidence evolves, not how motives do. The same
+boundary applies to the decision analysis. Incremental precision measures how
+much better than a blanket rule a model selects, which is necessary for a
+targeting decision and not sufficient for one: without randomised exposure
+the data cannot say whether a selected session would have converted anyway,
+so no treatment effect is identified and the results are not uplift estimates
+(Section~\ref{sec:related-uplift}). Two further parameters are unavailable
+here and would change the ordering if they varied enough by stage: the
+responsiveness of customers to the intervention, and the basket value of the
+conversions each stage delivers. Finally,
 external validity is bounded by the empirical setting---one retailer, one
 market, one month, offline evaluation. The framework is portable; these
 specific attribution trajectories are not claimed to be, and live
@@ -2022,7 +2334,12 @@ falsifiable prediction of Section~\ref{sec:discussion-decline}; finer stage
 lattices approaching per-event explanation trajectories; within-method
 variability baselines for cross-paradigm comparison; and deployment studies
 measuring whether stage-conditioned explanations change intervention
-decisions.
+decisions. The most consequential extension is a randomised one. The
+flag-rate sweep establishes which stage selects best under a given budget but
+cannot establish which stage \emph{responds} best, and a field experiment
+randomising exposure within stage would supply the missing quantity, allowing
+stage-conditioned attribution to be joined to uplift estimation rather than
+to propensity alone.
 
 %==============================================================================
 \section{Conclusion}
@@ -2047,6 +2364,17 @@ standard pipeline: the first without reporting chance level alongside
 performance, the second without stage conditioning, the third without
 instance-level validation.
 
+Two further analyses, prompted by the results rather than pre-specified,
+determine how the first finding should be read. Scoring every stage model on
+one fixed cohort shows that the decline is a property of who reaches each
+stage, not of what a longer prefix contains: a funnel evaluation that omits
+this check will attribute to information what belongs to selection. Sweeping
+the contact budget shows that the decision value of a stage and its ranking
+quality are separate quantities that can point in opposite directions --- the
+intent stage ranks worst of the three and, at budgets of a twentieth of
+sessions or more, targets best. Both results narrow the claim the study can
+make and sharpen the recommendation it can offer.
+
 The broader argument is that explanation quality tracks predictive signal
 and should be validated where decisions are made---per stage, and where
 individual customers are concerned, per instance. As machine learning
@@ -2056,13 +2384,9 @@ for explanations that support, rather than merely decorate, operational
 decisions.
 
 %==============================================================================
-\section*{CRediT authorship contribution statement}
+% CRediT roles are declared per author in the front matter and typeset here.
+\printcredits
 %==============================================================================
-% NOTE TO AUTHORS: adjust before submission.
-\textbf{Ayoub Agnaou:} Conceptualisation, Methodology, Software, Formal
-analysis, Investigation, Data curation, Writing -- original draft,
-Visualisation. \textbf{S.~Ailli:} Supervision, Validation, Writing --
-review \& editing.
 
 \section*{Declaration of competing interest}
 The authors declare that they have no known competing financial interests
@@ -2101,7 +2425,7 @@ differently, with the reason and the amendment number given. \emph{Exploratory}
 means the analysis was added after the protocol was fixed and is therefore not
 confirmatory evidence, however it reads.
 
-\begin{table*}[htbp]
+\begin{table}[htbp]
 \centering
 \caption{Alignment between the pre-specified protocol (v1.0) and the
 manuscript. Amendment numbers refer to the log described in
@@ -2194,23 +2518,41 @@ Entropy availability test & \S\ref{sec:s2-problem} &
 Attribution share restricted to prefixes where entropy is non-degenerate &
 \textbf{Exploratory}: added in response to review, to test whether the S2
 peak is definitional \\
+\addlinespace
+Fixed-cohort evaluation & \S\ref{sec:results-cohort} &
+All stage models scored on the sessions reaching every stage &
+\textbf{Exploratory} (A41): the protocol specified conditional-population
+evaluation and did not anticipate holding the cohort fixed \\
+\addlinespace
+Flag-rate sweep & \S\ref{sec:decision-economics} &
+Incremental precision across contact budgets from 1\% to 100\% &
+\textbf{Exploratory} (A42): added because the pre-specified $F_1$ threshold
+proved to determine the S3 conclusion \\
+\addlinespace
+Purchase-excluded whole-session comparator & \S\ref{sec:results-rq4} &
+Same static model with purchase events removed from the aggregation &
+\textbf{Exploratory} (A43): separates label leakage from temporal
+invalidity; supersedes the leaky comparator of A33 \\
 \bottomrule
 \end{tabular}
-\end{table*}
+\end{table}
 
-The final three rows deserve emphasis. Each is exploratory, and one of them
---- the comparison against a trivial targeting rule --- carries the paper's
-sharpest decision-support claim. We report it prominently because we judge it
-important, and we label it exploratory because it was not pre-specified. Both
-statements are true simultaneously, and a reader is entitled to weigh the
-finding accordingly.
+The exploratory rows deserve emphasis, and three of them changed conclusions
+rather than adding detail. The comparison against a trivial targeting rule
+carries the paper's sharpest decision-support claim; the flag-rate sweep then
+established that the claim does not hold across operating points and narrowed
+it; and the fixed-cohort evaluation reinterpreted the study's headline
+predictive result. We report all three prominently because we judge them
+important, and label them exploratory because they were not pre-specified.
+Both statements are true simultaneously, and a reader is entitled to weigh
+the findings accordingly.
 
 %==============================================================================
 \section{Pre-registered protocol and amendment log}
 \label{app:amendments}
 %==============================================================================
 
-The pre-specified protocol (v1.0) and the complete dated amendment log (40
+The pre-specified protocol (v1.0) and the complete dated amendment log (43
 entries) accompany this manuscript. Amendments record every deviation from
 the frozen protocol with its date, rationale and affected sections,
 including three cut-point redefinitions made on the basis of measurement
@@ -2476,7 +2818,7 @@ All other pipeline steps & not measured & --- \\
 
 \subsection{Literature comparison}
 
-\begin{table*}[htbp]
+\begin{table}[htbp]
 \centering
 \caption{Positioning against the closest sequence-aware explanation methods.
 Rows state properties checkable from each cited paper. No performance column
@@ -2497,7 +2839,7 @@ Multi-level PPM \citep{wickramanayake2023generating} & event / case & prefix-con
 \textbf{Funnel-Stage SHAP} (this work) & \textbf{feature, per funnel stage} & \textbf{stage cut-point (prefix only)} & \textbf{faithfulness, stability, seed and cross-paradigm} & \textbf{e-commerce clickstream} \\
 \bottomrule
 \end{tabular}
-\end{table*}
+\end{table}
 
 %==============================================================================
 \section{Reproducibility information}
@@ -2578,7 +2920,7 @@ which a reproducer must accept directly.
 
 %==============================================================================
 
-\bibliographystyle{elsarticle-harv}
+\bibliographystyle{cas-model2-names}
 \bibliography{references}
 
 \end{document}

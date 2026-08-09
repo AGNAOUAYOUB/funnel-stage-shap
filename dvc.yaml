@@ -320,3 +320,48 @@ stages:
     metrics:
       - reports/tables/whole_session_contrast_gap30s200000.csv:
           cache: false
+
+  whole_session_nobuy:
+    # RQ4, the comparator of record (amendment A43): purchase events removed, so
+    # the model still sees post-decision behaviour but not the outcome itself.
+    cmd: >-
+      python -m funnel_shap.cli whole-session --suffix gap30s200000
+      --exclude-purchase
+    deps:
+      - data/interim/sessions_gap30s200000.parquet
+      - data/interim/cutpoints_gap30s200000.parquet
+      - data/processed/splits/split_gap30s200000_temporal.parquet
+      - reports/tables/stage_importance_gap30s200000.csv
+      - src/funnel_shap/explain/whole_session.py
+    metrics:
+      - reports/tables/whole_session_contrast_gap30s200000_nobuy.csv:
+          cache: false
+
+  common_cohort:
+    # Amendment A41: every stage model scored on the sessions that reach every
+    # stage, separating information accumulation from population composition.
+    cmd: python -m funnel_shap.cli common-cohort --suffix gap30s200000
+    deps:
+      - data/processed/features_gap30s200000_S1.parquet
+      - data/processed/features_gap30s200000_S2.parquet
+      - data/processed/features_gap30s200000_S3.parquet
+      - data/processed/splits/split_gap30s200000_temporal.parquet
+      - src/funnel_shap/models/common_cohort.py
+    metrics:
+      - reports/tables/common_cohort_gap30s200000.csv:
+          cache: false
+
+  flag_rate_sweep:
+    # Amendment A42: incremental precision across contact budgets, after the
+    # F1-selected threshold proved to determine the S3 conclusion.
+    cmd: python -m funnel_shap.cli flag-rate-sweep --suffix gap30s200000
+    deps:
+      - data/processed/features_gap30s200000_S1.parquet
+      - data/processed/features_gap30s200000_S2.parquet
+      - data/processed/features_gap30s200000_S3.parquet
+      - data/processed/splits/split_gap30s200000_temporal.parquet
+      - src/funnel_shap/models/flag_rate.py
+      - src/funnel_shap/models/run_stages.py
+    metrics:
+      - reports/tables/flag_rate_sweep_gap30s200000.csv:
+          cache: false

@@ -1192,3 +1192,130 @@ untested; these are hypotheses the attribution generates.
 
 **Both new analyses are exploratory** and labelled as such in the text and in the alignment
 appendix. Both were prompted by review rather than pre-specified.
+
+### A41. The funnel decline is composition, not information (Sec. 11, 15)
+
+**Date:** 2026-08-09. **Status:** exploratory addition; changes the interpretation of H1.
+
+Every cross-stage comparison in the study evaluated each stage model on the sessions that
+reach that stage. Those populations differ in size by more than an order of magnitude and in
+prevalence by about six-fold, so the reported decline (lift 1.79 -> 1.41 -> 1.09) confounded
+two mechanisms: how much information a longer prefix carries, and how homogeneous the
+surviving population is. Earlier drafts named the confound in the discussion and did not
+test it, which is not the same thing.
+
+`funnel_shap.models.common_cohort` now scores all three stage models on one fixed
+population: the sessions reaching S3 -- which by construction have a defined prefix at every
+stage -- intersected with the frozen test partition. Training is unchanged; only the
+evaluation population is held fixed. The cohort is computed as an intersection rather than
+assumed to equal S3, so any violation of prefix nesting shrinks the cohort instead of
+passing silently, and an empty cohort raises rather than reporting a null result.
+
+Result (n = 821, prevalence 0.4629 identical across stages, LightGBM, 5 seeds):
+
+| Stage | PR-AUC | Lift | ROC-AUC |
+|---|---|---|---|
+| S1 | 0.4846 +/- 0.0025 | 1.047 +/- 0.005 | 0.5155 +/- 0.0035 |
+| S2 | 0.4776 +/- 0.0055 | 1.032 +/- 0.012 | 0.5172 +/- 0.0067 |
+| S3 | 0.4935 +/- 0.0036 | 1.066 +/- 0.008 | 0.5468 +/- 0.0029 |
+
+The monotone decline does not survive. Lift spans 0.034 against seed standard deviations of
+0.005-0.012, the ordering is not monotone, and ROC-AUC rises rather than falls. The decline
+reported in Section 5.2 is therefore primarily a property of who reaches each stage, not of
+what the prefix contains.
+
+**What changed in the manuscript.** New Section 5.3 and Table 5; the abstract; the
+introduction's list of findings; Section 7.1, where the selection reading is now presented
+as tested rather than as a plausible interpretation. **What did not change.** H1's rejection
+stands: H1 predicted that prevalence-normalised skill would improve along the funnel in
+operation, and it does not. The fixed-cohort result identifies the mechanism; it does not
+reverse the verdict. The generalisation the study may claim is correspondingly narrower --
+the effect belongs to the sampling structure of self-selected stages, not to the information
+content of behavioural sequences.
+
+Tests: `tests/test_common_cohort.py` (7 tests) asserts identical evaluation size and
+prevalence across stages, that the cohort is the intersection rather than an assumed S3, and
+that an empty cohort raises.
+
+### A42. The S3 targeting claim was an artefact of the F1 threshold; withdrawn and replaced (Sec. 11, 15)
+
+**Date:** 2026-08-09. **Status:** exploratory addition; retracts a claim made in A38-A40.
+
+Sections 6.1 and 6.3 concluded that "the model at the cart stage is operationally
+indistinguishable from a blanket policy" and that targeting at exploration is worth "roughly
+an order of magnitude more per contact" than later. Both rested on a single operating point
+per stage, chosen by maximising F1 on validation. F1 maximisation is prevalence-sensitive:
+as prevalence approaches one half the criterion is increasingly satisfied by flagging
+everything, and S3's prevalence is 0.521. The selected S3 threshold flags 99.0% of sessions,
+which is a near-blanket policy by construction -- so the finding that it adds nothing over a
+blanket policy is close to circular.
+
+Sweeping the flag rate instead, over the five frozen seeds, gives incremental precision
+(precision among top-scored sessions minus prevalence):
+
+| Flag rate | S1 | S2 | S3 |
+|---|---|---|---|
+| 1% | 0.2148 +/- 0.0022 | 0.0729 +/- 0.0116 | 0.0320 +/- 0.0767 |
+| 5% | 0.1282 +/- 0.0030 | 0.0451 +/- 0.0065 | 0.1162 +/- 0.0237 |
+| 10% | 0.0930 +/- 0.0016 | 0.0376 +/- 0.0077 | 0.1137 +/- 0.0130 |
+| 20% | 0.0615 +/- 0.0011 | 0.0325 +/- 0.0032 | 0.0743 +/- 0.0123 |
+| 30% | 0.0460 +/- 0.0007 | 0.0297 +/- 0.0011 | 0.0632 +/- 0.0112 |
+
+S3 is the *best* stage at every budget from 5% upward: 8.8 contacts per incremental
+conversion at a 10% flag rate, against 10.8 at S1 and 26.6 at S2. The claim that late-stage
+targeting adds nothing is withdrawn.
+
+**What survives.** Ranking skill still declines: top-decile lift falls monotonically
+(2.27x, 1.64x, 1.22x over five seeds). Exploration still dominates at small budgets --
+incremental precision 0.2148 +/- 0.0022 at a 1% flag rate, roughly seven times S3's, whose
+estimate at that budget is unusable (sd 0.0767 exceeds the mean, since 1% of a
+2,973-session partition is about thirty sessions). The two facts are compatible: lift is
+measured against a prevalence differing six-fold between stages, incremental precision in
+conversions per contact.
+
+**Consequence for the tuning paradox (A40).** That finding was also measured at the
+F1-selected point, so "tuning improves ranking while degrading targeting value" is now
+stated as what it is: evidence that tuning does not repair a badly chosen operating point,
+not evidence that tuning harms targeting. The substantive warning is unchanged -- a
+practitioner who tuned for PR-AUC and stopped there would have had no evidence for the
+improvement they inferred.
+
+**What changed in the manuscript.** Section 6.1's S3 paragraph; new Table 11 and
+surrounding text in Section 6.3; the abstract; the introduction; the decision matrix
+(Table 12) rows for S1 and S3; Section 6.4; Section 7.1; the conclusion.
+
+### A43. The RQ4 comparator contained the label; rebuilt without it (Sec. 11.1, 15)
+
+**Date:** 2026-08-09. **Status:** exploratory; supersedes the comparator introduced in A33.
+
+A33 replaced a circular stage-average comparator with a fitted whole-session model. That
+model aggregated over the complete session including its purchase events, so `n_events` and
+the purchase-intent composite encoded the outcome: PR-AUC 0.9995, ROC-AUC 0.9999 at
+prevalence 0.089. Reporting that as the whole-session benchmark is a straw man. No competent
+practitioner counts the outcome among the inputs, and the defect this paper is about is not
+label leakage but temporal invalidity -- features describing behaviour after the decision
+point.
+
+`whole_session_events(..., exclude_purchase=True)` drops purchase events and retains the
+rest of the session, isolating the second defect from the first. The label comes from the
+cut-point table and is unaffected. The fair comparator attains PR-AUC 0.6086 +/- 0.0007 and
+ROC-AUC 0.8925 +/- 0.0002 over five seeds on the same 38,715 test sessions at the same
+prevalence: far above the best stage
+model's 0.131, and not attributable to leakage. That gap is the value of post-decision
+information, which is exactly why retrospective explanations look convincing and cannot
+guide an intervention.
+
+Attribution under the fair comparator redistributes rather than averages. Over the five
+frozen seeds, engagement and temporal features take 45.5% +/- 1.2% of the whole-session
+model's mass, more than the 36.8% they reach at their own best stage; price context falls
+from 43.7% at S1 to 7.3%; navigation from 22.4% at S2 to 4.1%; hour of day from 15.7% to
+3.8%. A further 24.1% sits on features with no counterpart in the stage vocabulary
+(`whole_session_shares_gap30s200000_nobuy_seeds.csv`). RQ4 is answered affirmatively, with a mechanism
+more specific than the question presumed: a static analysis reports engagement intensity as
+the dominant lever everywhere and does not surface where the lever changes.
+
+**What changed in the manuscript.** Section 5.6 rewritten; Table 8 rebuilt from
+`whole_session_contrast_gap30s200000_nobuy.csv`; the leaky figures retained only as a stated
+measurement of the leakage; the RQ4 row of the contribution figure
+(`report/diagrams.py`), which still carried the retracted 11.1% stage-average.
+

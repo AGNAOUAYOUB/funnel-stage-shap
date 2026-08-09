@@ -30,8 +30,9 @@
 
 - Funnel-stage SHAP reveals how purchase drivers migrate across journey stages
 - Prefix-only features remove the label leakage common in session-level studies
-- Navigation entropy peaks mid-funnel, which static explanations average away
-- Conversion becomes harder to predict, not easier, deeper in the funnel
+- Navigation entropy peaks mid-funnel, where a fitted static model reports no window
+- Ranking gets harder deeper in the funnel, but a fixed cohort shows why: composition
+- Targeting value depends on the contact budget, and can invert the ranking order
 - Faithfulness and stability tests validate stage-conditioned explanations
 
 ## Abstract
@@ -49,8 +50,8 @@ Three results run against expectation. First, once normalised by its own chance 
 predictive performance *declines* across the funnel (lift 1.79 to 1.09; ROC-AUC 0.641 to
 0.570), so conversion becomes harder, not easier, to predict as intent forms. Second,
 attribution is strongly non-monotone: navigation entropy carries 3.5% of attribution mass at
-awareness, 22.4% at consideration and 7.4% at intent, a pattern any whole-session analysis
-averages into a single uninformative value. Third, cross-paradigm agreement between tree- and
+awareness, 22.4% at consideration and 7.4% at intent, a pattern a fitted whole-session model
+does not recover. Third, cross-paradigm agreement between tree- and
 recurrent-model attributions holds at the level of aggregate rankings but disappears at the
 level of individual journeys. We argue that explanation quality tracks predictive signal and
 should therefore be validated per stage rather than per model.
@@ -635,16 +636,24 @@ rather than a reporting convenience.
 
 Two implications follow, and they point in the same direction.
 
-First, **intervention should be concentrated early**. If late-stage prediction is close to
-chance relative to its base rate (lift 1.09 at S3), then models cannot usefully discriminate
-among cart-holders, and effort spent scoring them is largely wasted. This runs against the
-concentration of cart-abandonment tooling in the industry.
+First, **where to intervene depends on the contact budget**. Late-stage ranking is close to
+chance relative to its base rate (lift 1.09 at S3), so models cannot order cart-holders well.
+That is not the same as saying they cannot select them: swept across flag rates (amendment
+A42), S3 delivers the highest incremental precision of the three stages at every budget from
+5% upward, while S1 dominates at budgets of 1–2%. The earlier claim that late-stage targeting
+adds nothing was an artefact of an F1-selected threshold that flagged 99% of S3 sessions, and
+is withdrawn.
 
 Second, **the actionable signal is stage-specific**. Navigation entropy is the clearest case:
-a whole-session analysis reports a share of 0.111 and would rank it a minor driver, where it
-in fact reaches 0.224 at consideration — a value the static figure never takes at any stage
+a whole-session model fitted on the same data with purchase events removed (amendment A43)
+assigns the family 0.041, where the stage-conditioned view reaches 0.224 at consideration
 (**Table 10**). An intervention targeting wandering behaviour has purchase during
 consideration and close to none at cart.
+
+Third, **the funnel decline is composition, not information** (amendment A41). Scored on one
+fixed cohort of 821 sessions reaching every stage, lift is flat (1.047, 1.032, 1.066) and
+ROC-AUC rises slightly. The decline describes who survives to each stage rather than what a
+longer prefix carries.
 
 We note the necessary precondition: acting on predicted probabilities requires them to be
 calibrated, which §5.4 shows is easy to get wrong.
@@ -730,11 +739,13 @@ and a canonical session-level benchmark, it produced three results that a whole-
 analysis could not have produced.
 
 Normalised predictive performance falls rather than rises across the funnel, so conversion
-becomes harder to predict as intent forms, and the useful intervention window is earlier than
-industry practice assumes. Attribution is strongly non-monotone, with navigation entropy
-mattering at consideration and nowhere else — a pattern any single whole-session attribution
-averages away. And convergent validity between explanation paradigms, which holds at the level
-of aggregate rankings, disappears at the level of individual journeys.
+becomes harder to rank as intent forms — a decline that a fixed-cohort test attributes to the
+composition of who reaches each stage rather than to the information a longer prefix carries.
+Attribution is strongly non-monotone, with navigation entropy mattering at consideration and
+nowhere else — a pattern a fitted whole-session model does not recover, reallocating its
+attribution onto session duration and pace instead. And convergent validity between
+explanation paradigms, which holds at the level of aggregate rankings, disappears at the level
+of individual journeys.
 
 Three of the four pre-registered hypotheses were not supported. We report them as such. The
 practical recommendation for researchers applying SHAP to consumer-journey data is narrower

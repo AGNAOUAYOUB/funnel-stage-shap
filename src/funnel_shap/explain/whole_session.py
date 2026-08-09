@@ -17,10 +17,26 @@ with the same interventional TreeSHAP and the same correlated-feature grouping
 used for the stage models. The comparison is therefore between two real models
 differing in one respect: whether the prefix constraint was applied.
 
-**This model is deliberately leaky.** Whole-session features see cart and
-purchase-adjacent behaviour, which is precisely the practice the paper
-criticises. Its predictive score is reported to quantify what that leakage buys
--- it is a measure of the practice, not a baseline we endorse.
+**Two comparators, because they answer different questions.** The critique of
+whole-session practice bundles two distinct defects, and a comparator that
+commits both cannot tell them apart:
+
+*Label leakage.* Aggregating over the entire session counts the purchase event
+itself, so ``n_events`` and any purchase-intent composite encode the outcome.
+A model built this way predicts the label because it contains the label. This
+is a trivial failure and no competent practitioner commits it, so a comparator
+that does so demonstrates nothing about real practice.
+
+*Temporal invalidity.* Even with the purchase event removed, whole-session
+features still describe behaviour occurring **after** the decision point at
+which an intervention would have been taken. This is the defect the paper is
+actually about, it is committed routinely, and isolating it requires a
+comparator that excludes the label but retains everything else.
+
+``exclude_purchase=True`` builds the second. Both are reported: the first
+quantifies how much of the apparent performance of whole-session modelling is
+simply the label, and the second is the fair test of whether stage
+conditioning surfaces structure a legitimate static analysis would miss.
 """
 
 from __future__ import annotations
@@ -54,21 +70,39 @@ class WholeSessionResult:
         )
 
 
-def whole_session_events(sessions: pl.DataFrame, cutpoints: pl.DataFrame) -> pl.LazyFrame:
+def whole_session_events(
+    sessions: pl.DataFrame,
+    cutpoints: pl.DataFrame,
+    *,
+    exclude_purchase: bool = False,
+) -> pl.LazyFrame:
     """Every event of every session, with the label attached.
 
     This is the deliberate complement of :func:`prefix_events`: no cut-point is
-    applied, so the frame contains exactly the information a conventional
-    whole-session pipeline would use.
+    applied, so the frame contains what a conventional whole-session pipeline
+    would use.
+
+    With ``exclude_purchase=True`` the purchase events themselves are dropped
+    while the rest of the session is retained. The resulting model still sees
+    post-decision-point behaviour -- which is the defect under study -- but no
+    longer counts the outcome among its inputs, so its performance cannot be
+    dismissed as trivial label leakage. The label is taken from the cut-point
+    table and is unaffected by the filter.
     """
     config = JourneyConfig()
     s = config.session_column
     labels = cutpoints.select([s, "label"])
-    return order_events(sessions.lazy(), config).join(labels.lazy(), on=s, how="inner")
+    events = order_events(sessions.lazy(), config)
+    if exclude_purchase:
+        events = events.filter(pl.col(config.type_column) != "purchase")
+    return events.join(labels.lazy(), on=s, how="inner")
 
 
 def build_whole_session_features(
-    sessions: pl.DataFrame, cutpoints: pl.DataFrame
+    sessions: pl.DataFrame,
+    cutpoints: pl.DataFrame,
+    *,
+    exclude_purchase: bool = False,
 ) -> pl.DataFrame:
     """Aggregate whole sessions with the S3 feature recipe.
 
@@ -77,7 +111,9 @@ def build_whole_session_features(
     as possible; the only difference that remains is the window they see, which
     is the comparison RQ4 is about.
     """
-    events = whole_session_events(sessions, cutpoints)
+    events = whole_session_events(
+        sessions, cutpoints, exclude_purchase=exclude_purchase
+    )
     return build_stage_features(events, "S3")
 
 
@@ -143,6 +179,7 @@ def run_whole_session_contrast(
     background_size: int = 300,
     max_explain: int = 4000,
     grouping: dict[str, str] | None = None,
+    exclude_purchase: bool = False,
 ) -> WholeSessionResult:
     """Fit and explain a whole-session model on the frozen split."""
     import shap
@@ -151,7 +188,9 @@ def run_whole_session_contrast(
     from ..models.baselines import build_pipeline
 
     set_global_seed(seed)
-    features = build_whole_session_features(sessions, cutpoints)
+    features = build_whole_session_features(
+        sessions, cutpoints, exclude_purchase=exclude_purchase
+    )
     split = load_split(suffix, protocol)
 
     joined = features.join(split.select(["session_id", "partition"]), on="session_id")

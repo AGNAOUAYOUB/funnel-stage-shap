@@ -909,6 +909,10 @@ def whole_session_cmd(
     seed: int = 42,
     max_explain: int = 4000,
     background_size: int = 300,
+    exclude_purchase: bool = typer.Option(
+        False,
+        help="Drop purchase events: isolates temporal invalidity from label leakage",
+    ),
     track: bool = typer.Option(True, help="Log the run to MLflow (Sec. 6.2)"),
 ) -> None:
     """RQ4: an empirical whole-session model to contrast against the stages."""
@@ -937,12 +941,13 @@ def whole_session_cmd(
     result = run_whole_session_contrast(
         sessions, cuts, suffix=suffix, protocol=protocol, seed=seed,
         max_explain=max_explain, background_size=background_size,
-        grouping=grouping,
+        grouping=grouping, exclude_purchase=exclude_purchase,
     )
     typer.echo(result.summary())
 
     table = contrast_table(importance, result)
-    out = paths.TABLES / f"whole_session_contrast_{suffix}.csv"
+    tag = f"{suffix}_nobuy" if exclude_purchase else suffix
+    out = paths.TABLES / f"whole_session_contrast_{tag}.csv"
     table.write_csv(out)
 
     typer.echo("")
@@ -965,6 +970,137 @@ def whole_session_cmd(
             "prevalence": result.prevalence, "n_test": result.n_test,
         })
         run.log_metrics({f"whole_share.{k}": v for k, v in result.shares.items()})
+        run.log_artifact(out)
+
+
+@app.command("common-cohort")
+def common_cohort_cmd(
+    suffix: str = _SUFFIX_OPT,
+    protocol: str = "temporal",
+    model: str = "lightgbm",
+    seeds: str = typer.Option("", help="Comma-separated subset of the frozen seed list"),
+    track: bool = typer.Option(True, help="Log the run to MLflow (Sec. 6.2)"),
+) -> None:
+    """Score every stage model on the sessions that reach every stage.
+
+    The headline cross-stage comparison evaluates each stage on its own
+    population, so it confounds what the prefix carries with who survives to
+    the stage. This holds the evaluated cohort fixed and separates them.
+    """
+    paths.ensure_dirs()
+
+    from .data.journey import MODELLING_STAGES
+    from .models.common_cohort import cohort_table, common_cohort_ids, run_common_cohort
+    from .seeds import SEEDS
+
+    features = {}
+    for stage in MODELLING_STAGES:
+        path = paths.PROCESSED / f"features_{suffix}_{stage}.parquet"
+        if path.exists():
+            features[stage] = pl.read_parquet(path)
+    if not features:
+        raise typer.BadParameter(f"no stage features for suffix {suffix!r}")
+
+    chosen_seeds = tuple(int(s) for s in seeds.split(",") if s.strip()) or SEEDS
+    typer.echo(f"cohort: {len(common_cohort_ids(features)):,} sessions reach every stage")
+
+    runs = run_common_cohort(
+        features, suffix=suffix, protocol=protocol, model=model, seeds=chosen_seeds
+    )
+    table = cohort_table(runs)
+    out = paths.TABLES / f"common_cohort_{suffix}.csv"
+    table.write_csv(out)
+
+    typer.echo("")
+    typer.echo(table)
+    typer.echo("")
+    typer.echo(f"-> {out}")
+
+    from .tracking import track_run
+
+    with track_run(
+        f"common-cohort/{suffix}",
+        experiment="common-cohort",
+        params={
+            "suffix": suffix, "protocol": protocol, "model": model,
+            "seeds": ",".join(str(s) for s in chosen_seeds),
+        },
+        enabled=track,
+    ) as run:
+        for row in table.to_dicts():
+            run.log_metrics({
+                f"lift.{row['stage']}": row["lift_mean"],
+                f"pr_auc.{row['stage']}": row["pr_auc_mean"],
+                f"roc_auc.{row['stage']}": row["roc_auc_mean"],
+            })
+        run.log_artifact(out)
+
+
+@app.command("flag-rate-sweep")
+def flag_rate_sweep_cmd(
+    suffix: str = _SUFFIX_OPT,
+    protocol: str = "temporal",
+    seeds: str = typer.Option("", help="Comma-separated subset of the frozen seed list"),
+    rates: str = typer.Option(
+        "0.01,0.02,0.05,0.10,0.20,0.30,0.50,1.00",
+        help="Contact budgets, as the share of sessions flagged",
+    ),
+    track: bool = typer.Option(True, help="Log the run to MLflow (Sec. 6.2)"),
+) -> None:
+    """Incremental precision over a range of contact budgets (Sec. 6.3).
+
+    The decision analysis at a single F1-selected threshold is dominated by
+    that rule's behaviour at high prevalence. Sweeping the flag rate reports
+    what each stage is worth per contact at a budget the manager chooses.
+    """
+    paths.ensure_dirs()
+
+    from .data.journey import MODELLING_STAGES
+    from .models.flag_rate import sweep_table
+    from .models.run_stages import run_stage_models
+    from .seeds import SEEDS
+
+    features = {}
+    for stage in MODELLING_STAGES:
+        path = paths.PROCESSED / f"features_{suffix}_{stage}.parquet"
+        if path.exists():
+            features[stage] = pl.read_parquet(path)
+    if not features:
+        raise typer.BadParameter(f"no stage features for suffix {suffix!r}")
+
+    chosen_seeds = tuple(int(s) for s in seeds.split(",") if s.strip()) or SEEDS
+    chosen_rates = [float(r) for r in rates.split(",") if r.strip()]
+
+    runs = run_stage_models(
+        features, suffix=suffix, protocol=protocol, models=("lightgbm",),
+        seeds=chosen_seeds, feature_sets=("full",), n_resamples=2000,
+    )
+    by_stage: dict[str, list] = {}
+    for r in runs:
+        by_stage.setdefault(r.stage, []).append((r.y_test, r.test_scores))
+
+    table = sweep_table(by_stage, rates=chosen_rates, stage_order=MODELLING_STAGES)
+    out = paths.TABLES / f"flag_rate_sweep_{suffix}.csv"
+    table.write_csv(out)
+    typer.echo("")
+    typer.echo(table)
+    typer.echo("")
+    typer.echo(f"-> {out}")
+
+    from .tracking import track_run
+
+    with track_run(
+        f"flag-rate-sweep/{suffix}",
+        experiment="flag-rate-sweep",
+        params={
+            "suffix": suffix, "protocol": protocol,
+            "seeds": ",".join(str(s) for s in chosen_seeds), "rates": rates,
+        },
+        enabled=track,
+    ) as run:
+        for row in table.to_dicts():
+            key = f"{row['stage']}.{int(row['flag_rate'] * 100)}pct"
+            run.log_metrics({f"incremental_precision.{key}": row["incremental_precision_mean"]})
         run.log_artifact(out)
 
 

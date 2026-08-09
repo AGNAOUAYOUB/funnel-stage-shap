@@ -383,7 +383,7 @@ def diagram_dsr(directory: Path = FIGURES) -> list[Path]:
     _arrow(ax, (58, 48), (58, 60), color=ORANGE, lw=1.6, rad=0.32)
     ax.text(50, 54, "refine", ha="center", fontsize=7.4, color=ORANGE,
             style="italic", weight="bold")
-    ax.text(50, 21.5, "29 logged amendments\n(3 cut-point redefinitions, 1 reversal, 1 withdrawal)",
+    ax.text(50, 21.5, "43 logged amendments\n(3 cut-point redefinitions; several retract an earlier claim)",
             ha="center", fontsize=6.9, color=GREY, linespacing=1.35)
 
     _box(ax, 74.5, 62, 21, 20,
@@ -514,21 +514,21 @@ def diagram_contributions(directory: Path = FIGURES) -> list[Path]:
 
     rows = [
         (68, "RQ1\nPrediction\nby stage",
-         "Prefix-only features;\nPR-AUC lift as the\ncross-stage metric",
-         "Lift falls 1.79→1.09\nROC-AUC 0.641→0.569\nH1 contradicted",
-         "Predictability declines\nas intent forms;\nsignal moves off-stream", BLUE),
+         "Prefix-only features;\nPR-AUC lift, plus one\nfixed evaluation cohort",
+         "Lift falls 1.79→1.09,\nbut is flat on a fixed\ncohort; H1 contradicted",
+         "The funnel effect is\ncomposition, not\nlost information", BLUE),
         (48, "RQ2\nAttribution\nmigration",
          "Stage-conditioned\nTreeSHAP with fixed\ncorrelation grouping",
          "Entropy 0.035→0.224\n→0.074 (non-monotone)\nH2 partly supported",
          "Exploration is a\nstage-specific mode,\nnot a decaying trend", ORANGE),
         (28, "RQ3\nFaithfulness\nand stability",
          "Pre-registered thresholds;\nper-instance as well as\naggregate agreement",
-         "Seed ρ ≥ 0.886 ✓\nS2 faithfulness 0.494 ✗\nH3, H4 not supported",
+         "Seed ρ ≥ 0.886 ✓\nFaithfulness flat 0.49–0.57\nH3, H4 not supported",
          "Explanation quality\ntracks predictive signal\n→ validate per stratum", GREEN),
         (8, "RQ4\nActionability",
-         "Static counterfactual\nbuilt on the same data\n(stage-average share)",
-         "Static reports 0.111 for\nnavigation; true peak\n0.224 at S2",
-         "Intervention window is\nearly/mid funnel, not\nat the cart", PINK),
+         "Whole-session model on\nthe same data, purchase\nevents removed",
+         "Static puts 0.46 on\nengagement; price 0.44\nat S1 falls to 0.07",
+         "Static analysis hides\nwhere the lever changes\nalong the journey", PINK),
     ]
 
     for yb, rq, method, finding, theory, colour in rows:
