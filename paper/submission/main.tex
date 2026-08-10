@@ -446,7 +446,7 @@ a retrospective attribution is.
 
 No existing work jointly delivers temporally valid, stage-specific
 explanations \emph{and} evaluates their quality across the journey
-(Figure~\ref{fig:gap}). Sequential prediction research supplies temporal
+Sequential prediction research supplies temporal
 discipline without explanation; consumer-analytics XAI supplies explanation
 without temporal discipline; process monitoring supplies prefix-constrained
 prediction with, at most, unvalidated prefix explanations. The framework
@@ -455,12 +455,10 @@ prefix-constrained attribution, and quantitative validation of the
 resulting explanations, instantiated end-to-end on a large e-commerce
 clickstream.
 
-% [fig:gap moved to supplementary material]
 
-Table~\ref{tab:positioning} summarises the comparison with the
+The comparison is with the
 closest-related explanation methods.
 
-% [tab:positioning moved to supplementary material]
 
 %==============================================================================
 \section{Conceptual framework}
@@ -475,7 +473,7 @@ each funnel stage is an independent decision problem in which behaviour is
 represented by the event prefix observable at that stage, purchase
 probability is estimated from that prefix, and the Shapley explanation is
 computed from exactly the same representation.
-Figure~\ref{fig:architecture} presents the architecture. Its essential
+The framework's essential
 property is visible in the topology: both explanation layers---TreeSHAP
 over the stage models and TimeSHAP over the recurrent arm---descend from
 the \emph{same} nested prefix representation that feeds prediction, rather
@@ -488,7 +486,6 @@ structurally, at the point where representations are constructed, rather
 than procedurally by convention within each analysis. The layers are
 formalised below.
 
-% [fig:architecture moved to supplementary material]
 
 \subsection{Sessions as sequential behavioural processes}
 \label{sec:framework-sessions}
@@ -631,7 +628,6 @@ that cycle-two results are hypothesis-generating, and a reader weighting
 confirmatory and exploratory evidence differently should weight them
 accordingly.
 
-% [fig:dsr moved to supplementary material]
 
 The evaluation is organised around four pre-specified hypotheses. H1,
 addressing RQ1, expected prevalence-normalised predictive performance to
@@ -646,6 +642,15 @@ decision---stage definitions, feature dictionary, splits, seeds, metrics,
 thresholds and statistical procedures---was fixed before the test partition
 was opened, and the frozen seed list $\{7, 17, 23, 42, 101\}$ (protocol
 Appendix~B) governs all seeded procedures.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{diag4_dsr.pdf}
+\caption{The design science research cycle as instantiated in this study:
+problem identification, artifact design, instantiation on two datasets,
+pre-specified evaluation, and a public amendment log closing the loop.}
+\label{fig:dsr}
+\end{figure}
 
 \subsection{Data sources}
 \label{sec:methods-data}
@@ -680,8 +685,7 @@ $\delta = 30$ minutes (sensitivity to $\delta$ is evaluated in
 Section~\ref{sec:results-sensitivity}). The full corpus yields 5{,}366{,}181
 sessions; a seeded, user-level subsample of 200{,}000 users---permitted by
 the protocol for tractability---yields the analytical dataset of 485{,}459
-sessions. Figure~\ref{fig:dataflow} reports the complete data-flow
-accounting from raw events to modelled sessions. Two properties of this
+sessions. Two properties of this
 accounting matter for the validity of everything downstream. First, every
 exclusion is enumerated---malformed events, boundary-straddling users,
 sessions failing stage reachability---so the population each model is fitted
@@ -692,7 +696,6 @@ allows the sample-size sensitivity analysis of
 Section~\ref{sec:results-sensitivity} to interpret the 400{,}000-user
 superset as a controlled enlargement rather than a different draw.
 
-% [fig:dataflow moved to supplementary material]
 
 \textbf{Stage cut-points.} Three modelled stages operationalise the funnel:
 S1 (\emph{early exploration}: session entry, cut at the initial catalogue
@@ -839,11 +842,10 @@ not an artefact of one weak arm.
 \label{sec:methods-validation}
 
 Layer 3 evaluates explanation quality along four axes
-(Figure~\ref{fig:validation}), with pass thresholds fixed in advance:
+with pass thresholds fixed in advance:
 faithfulness correlation $> 0.5$; cross-seed and cross-paradigm Spearman
 $> 0.6$.
 
-% [fig:validation moved to supplementary material]
 
 \emph{Faithfulness} is the \citet{bhatt2020evaluating} correlation between
 attributed importance and the measured change in model output when the
@@ -934,10 +936,29 @@ because exact TreeSHAP is available for it. Logistic regression's zero
 standard deviation is correct rather than anomalous: with a fixed split and
 a convex objective, the fit is deterministic.
 
-% [tab:baselines moved to supplementary material]
+\begin{table}[t]
+\centering
+\caption{Dataset A baselines (month-ordered split, five seeds). ECE is
+expected calibration error before and after the calibration correction of
+Section~\ref{sec:methods-prediction}.}
+\label{tab:baselines}
+\small
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Model} & \textbf{PR-AUC} & \textbf{ROC-AUC} &
+\textbf{ECE (unc.)} & \textbf{ECE (cal.)} \\
+\midrule
+CatBoost            & $0.699 \pm 0.006$ & 0.905 & 0.063 & 0.018 \\
+Random forest       & $0.685 \pm 0.006$ & 0.910 & 0.096 & 0.015 \\
+LightGBM            & $0.677 \pm 0.008$ & 0.899 & 0.065 & 0.026 \\
+XGBoost             & $0.676 \pm 0.005$ & 0.902 & 0.036 & 0.018 \\
+Logistic regression & $0.583 \pm 0.000$ & 0.879 & 0.203 & 0.032 \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 Dataset~B stage models are reported in Table~\ref{tab:stage-models} and
-Figures~\ref{fig:curve} and~\ref{fig:stageperf}.
+Figure~\ref{fig:curve}.
 
 \begin{table}[t]
 \centering
@@ -972,7 +993,6 @@ the chance line, while prevalence-free ROC-AUC declines from 0.641 to 0.570.}
 \label{fig:curve}
 \end{figure}
 
-% [fig:stageperf moved to supplementary material]
 
 \textbf{H1 is not supported under the pre-specified primary metric, and the
 direction of the effect is metric-dependent.} The protocol (\S11) fixes
@@ -1149,7 +1169,31 @@ differences that carry the argument.
 Table~\ref{tab:ablation} reports the pre-specified nine-contrast family
 with stratified paired bootstrap intervals and Holm correction.
 
-% [tab:ablation moved to supplementary material]
+\begin{table}[t]
+\centering
+\caption{Feature-family contrasts (PR-AUC differences, five seeds, 2{,}000
+stratified bootstrap resamples). ``Excludes 0'' refers to the 95\%
+bootstrap interval of the difference. With five seeds the minimum attainable
+Wilcoxon $p$ is 0.0625, so seed-level tests are descriptive.}
+\label{tab:ablation}
+\small
+\begin{tabular}{@{}llS[table-format=+1.4]S[table-format=+1.4]S[table-format=+1.4]c@{}}
+\toprule
+\textbf{Stage} & \textbf{Contrast} & {$\Delta$PR-AUC} &
+{\textbf{CI low}} & {\textbf{CI high}} & \textbf{Excludes 0} \\
+\midrule
+S1 & temporal vs.\ baseline           & +0.0102 & +0.0045 & +0.0167 & yes \\
+S1 & entropy+velocity vs.\ baseline   & +0.0038 & -0.0002 & +0.0084 & no  \\
+S1 & entropy+velocity beyond temporal & -0.0006 & -0.0017 & +0.0005 & no  \\
+S2 & temporal vs.\ baseline           & +0.0120 & +0.0057 & +0.0197 & yes \\
+S2 & entropy+velocity vs.\ baseline   & +0.0035 & -0.0011 & +0.0085 & no  \\
+S2 & entropy+velocity beyond temporal & +0.0007 & -0.0017 & +0.0031 & no  \\
+S3 & temporal vs.\ baseline           & +0.0139 & -0.0074 & +0.0370 & no  \\
+S3 & entropy+velocity vs.\ baseline   & +0.0156 & -0.0027 & +0.0346 & no  \\
+S3 & entropy+velocity beyond temporal & +0.0018 & -0.0045 & +0.0085 & no  \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 Temporal pacing features contribute measurably at S1 and S2 (+0.0102 and
 +0.0120, intervals excluding zero; 8.2\% and 16.6\% relative to the
@@ -1172,11 +1216,29 @@ pattern appears below.
 \label{sec:results-migration}
 
 Table~\ref{tab:migration} and Figures~\ref{fig:migration}
-and~\ref{fig:alluvial} report the share of mean absolute SHAP mass per
+reports the share of mean absolute SHAP mass per
 feature family and stage, with correlated features grouped as described in
 Section~\ref{sec:methods-explain}.
 
-% [tab:migration moved to supplementary material]
+\begin{table}[t]
+\centering
+\caption{Attribution share by feature family and stage (proportion of mean
+absolute SHAP mass; columns sum to 1 up to rounding).}
+\label{tab:migration}
+\small
+\begin{tabular}{@{}lS[table-format=1.3]S[table-format=1.3]S[table-format=1.3]@{}}
+\toprule
+\textbf{Family} & {\textbf{S1}} & {\textbf{S2}} & {\textbf{S3}} \\
+\midrule
+Price context            & 0.437 & 0.239 & 0.379 \\
+Product views / revisits & 0.192 & 0.033 & 0.057 \\
+Engagement / temporal    & 0.169 & 0.368 & 0.338 \\
+Hour of day              & 0.157 & 0.125 & 0.133 \\
+Navigation / categories  & 0.035 & 0.224 & 0.074 \\
+Weekend indicator        & 0.010 & 0.011 & 0.020 \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \begin{figure}[htbp]
 \centering
@@ -1187,15 +1249,10 @@ consideration.}
 \label{fig:migration}
 \end{figure}
 
-% [fig:alluvial moved to supplementary material]
 
-Four trajectories carry the substantive story, and the two figures render
-them at complementary granularities: Figure~\ref{fig:migration} plots each
-family's share as a line across stages, making slopes and reversals legible,
-while the alluvial rendering of Figure~\ref{fig:alluvial} shows the same
-mass flowing between stages, making visible how the \emph{composition} of
-the model's evidence base is reorganised even where individual shares change
-modestly. \emph{Engagement and temporal} features rise from 16.9\% at
+Four trajectories carry the substantive story, and Figure~\ref{fig:migration}
+plots each family's share as a line across stages, making slopes and
+reversals legible. \emph{Engagement and temporal} features rise from 16.9\% at
 exploration to 36.8\% at consideration, stabilising at 33.8\% before
 purchase: sustained interaction becomes the dominant evidence as intent
 consolidates. \emph{Product-view} features collapse from 19.2\% to 3.3\%:
@@ -1420,7 +1477,7 @@ than as a conserved transfer of mass.
 \subsection{Explanation quality (RQ3)}
 \label{sec:results-quality}
 
-Table~\ref{tab:quality} and Figure~\ref{fig:quality} report the validation
+Table~\ref{tab:quality} reports the validation
 layer.
 
 \begin{table}[t]
@@ -1445,14 +1502,12 @@ S3 & $0.565 \pm 0.169$ & \pass & 0.3495 & 0.5898 & 0.028 / 0.010 & 0.943 / 0.886
 \end{tabular}
 \end{table}
 
-% [fig:quality moved to supplementary material]
 
-Figure~\ref{fig:quality} juxtaposes the three arms, and its most
-informative property is what does \emph{not} vary: the faithfulness panel
-shows all three stages clustered in a narrow band around the threshold
-while the consistency panel shows all three pinned near the ceiling, so the
-quality profile is high-reproducibility, moderate-faithfulness everywhere,
-rather than degrading with depth in the funnel. \emph{Faithfulness} sits
+The most informative property of the three arms together is what does
+\emph{not} vary: faithfulness clusters in a narrow band around the threshold
+at every stage and reproducibility sits near the ceiling at every stage, so
+the quality profile is high-reproducibility, moderate-faithfulness
+everywhere, rather than degrading with depth in the funnel. \emph{Faithfulness} sits
 between 0.494 and 0.571, and S2 misses the pre-specified bar; we record this
 as a failure because the threshold was fixed in advance, and we decline to
 interpret it. The gap between S2 and the pre-set bar is 0.006 against a
@@ -1514,7 +1569,25 @@ and carry no weight here.
 well-powered: for each shared concept, tree and sequence attributions are
 correlated across 350+ shared sessions, over five seeds.
 
-% [tab:h4 moved to supplementary material]
+\begin{table}[t]
+\centering
+\caption{Cross-paradigm agreement. The aggregate column is the pre-specified
+statistic and is reported for completeness only: computed over four or five
+shared concepts, it has too little resolution to interpret. The verdict rests
+on the per-instance columns.}
+\label{tab:h4}
+\small
+\begin{tabular}{@{}lS[table-format=+1.3]S[table-format=+1.3]c@{}}
+\toprule
+\textbf{Stage} & {\textbf{Aggregate $\rho$ (uninterpretable)}} &
+{\textbf{Per-instance mean $\rho$}} & \textbf{Sign-stable concepts} \\
+\midrule
+S1 & +0.200 & +0.179 & 1 of 4 \\
+S2 & +0.500 & -0.018 & 0 of 5 \\
+S3 & +0.600 & +0.046 & 2 of 5 \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 Per-instance agreement is indistinguishable from zero at every stage, and
 only 3 of 14 (stage, concept) pairs hold a consistent sign across seeds.
@@ -1541,7 +1614,22 @@ point, and stage prevalence by well under half a point
 (Table~\ref{tab:gap})---all far smaller than the between-stage differences
 on which the paper's claims rest.
 
-% [tab:gap moved to supplementary material]
+\begin{table}[t]
+\centering
+\caption{Sessionisation-gap sensitivity (full corpus). Cells are
+reach\,/\,prevalence.}
+\label{tab:gap}
+\small
+\begin{tabular}{@{}lS[table-format=7.0]ccc@{}}
+\toprule
+\textbf{Gap} & {\textbf{Sessions}} & \textbf{S1} & \textbf{S2} & \textbf{S3} \\
+\midrule
+15 min & 5544851 & 0.978 / 0.0864 & 0.471 / 0.0652 & 0.092 / 0.5160 \\
+30 min & 5366181 & 0.979 / 0.0885 & 0.480 / 0.0683 & 0.093 / 0.5210 \\
+60 min & 5219040 & 0.979 / 0.0897 & 0.487 / 0.0705 & 0.093 / 0.5248 \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \paragraph{Sample size} Doubling the subsample to 400{,}000 users changes
 PR-AUC by $+0.003$ to $+0.009$ and leaves every conclusion intact: lift
@@ -1570,8 +1658,8 @@ peers faces an easier problem than one tested on the future.
 
 \paragraph{Calibration set} Fitting the calibrator on the validation month
 rather than on a slice of the training period raises expected calibration
-error from 0.025 to 0.118. Figure~\ref{fig:reliability} shows why the
-failure is systematic rather than noisy: the validation-calibrated
+error from 0.025 to 0.118. The failure is systematic rather than noisy: the
+validation-calibrated
 reliability curve falls below the identity line in \emph{every} probability
 bin---observed conversion rates are uniformly lower than predicted
 probabilities---which is the signature of a calibrator transported from a
@@ -1582,7 +1670,6 @@ prior-probability shift, and the reasons the textbook choice of calibration
 set inverts under drift are developed in
 Section~\ref{sec:discussion-method}.
 
-% [fig:reliability moved to supplementary material]
 
 %==============================================================================
 \section{Decision-support interpretation}
@@ -1631,7 +1718,28 @@ governed by the threshold rule rather than by the models, which is the point
 of this subsection. Table~\ref{tab:error} reports the confusion structure at
 each stage's validation-selected operating point.
 
-% [tab:error moved to supplementary material]
+\begin{table}[htbp]
+\centering
+\caption{Error structure at the operating threshold (seed 42, test partition)
+against the always-positive rule. \emph{Flag rate} is the share of sessions
+referred for intervention; \emph{FP per TP} is the false positives incurred
+per true positive. $F_1$ margin is the model's $F_1$ minus that of the trivial
+rule at the same prevalence. Source:
+\texttt{appendix\_error\_analysis\_gap30s200000.csv}.}
+\label{tab:error}
+\small
+\begin{tabular}{@{}lS[table-format=5.0]S[table-format=1.4]S[table-format=1.3]S[table-format=5.0]S[table-format=5.0]S[table-format=1.3]S[table-format=1.3]S[table-format=1.4]S[table-format=1.4]S[table-format=+1.4]S[table-format=2.2]@{}}
+\toprule
+\textbf{Stage} & {$N$} & {$\pi_s$} & {\textbf{Flag rate}} & {\textbf{TP}} &
+{\textbf{FP}} & {\textbf{Prec.}} & {\textbf{Rec.}} & {$F_1$} &
+{$F_1$ trivial} & {$F_1$ margin} & {\textbf{FP per TP}} \\
+\midrule
+S1 & 38059 & 0.0734 & 0.174 & 950  & 5693 & 0.143 & 0.340 & 0.2014 & 0.1367 & +0.0647 & 5.99 \\
+S2 & 17884 & 0.0589 & 0.243 & 398  & 3957 & 0.091 & 0.378 & 0.1472 & 0.1113 & +0.0359 & 9.94 \\
+S3 & 2973  & 0.5214 & 0.990 & 1542 & 1402 & 0.524 & 0.995 & 0.6862 & 0.6854 & +0.0008 & 0.91 \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 At its own operating point the intent-stage model refers 99.0\% of sessions
 and beats the blanket rule by 0.0008 $F_1$; the earlier stages refer 17.4\%
@@ -1762,7 +1870,32 @@ the \emph{incremental} precision, $\text{precision} - \pi_s$, and the
 break-even becomes $u^{*}_{\text{inc}} = c / \big( (\text{precision} - \pi_s)
 \cdot m \big)$. Table~\ref{tab:economics} reports both.
 
-% [tab:economics moved to supplementary material]
+\begin{table}[htbp]
+\centering
+\caption{Decision economics at each stage's operating point, over the five
+frozen seeds. ``Contacts per incremental conversion'' is
+$1/(\text{precision} - \pi_s)$: the sessions that must be contacted to obtain
+one conversion \emph{beyond} what contacting everyone already delivers.
+$\sigma$ from zero is the incremental precision divided by its seed standard
+deviation. The per-seed range is reported because the reciprocal of a
+near-zero quantity is unstable, and at S3 it is: a point estimate there would
+imply a precision the data do not support. Costs and margins are free
+parameters; no monetary figures for this retailer were available and none are
+assumed.}
+\label{tab:economics}
+\small
+\begin{tabular}{@{}lS[table-format=1.4]S[table-format=1.4]cS[table-format=2.2]S[table-format=3.1]l@{}}
+\toprule
+\textbf{Stage} & {$\pi_s$} & {\textbf{Precision}} &
+\textbf{Precision} $-\pi_s$ & {$\sigma$ \textbf{from 0}} &
+{\textbf{Contacts per incr.\ conv.}} & \textbf{Per-seed range} \\
+\midrule
+S1 & 0.0734 & 0.1387 & $+0.0654 \pm 0.0070$ & 9.34 & 15.3 & 13--18 \\
+S2 & 0.0589 & 0.0871 & $+0.0281 \pm 0.0035$ & 8.03 & 35.5 & 31--39 \\
+S3 & 0.5214 & 0.5253 & $+0.0039 \pm 0.0035$ & 1.11 & 256.9 & 104--34{,}751 \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 The final two columns carry the argument at these operating points. To obtain
 one conversion beyond what a blanket policy already delivers, an organisation
@@ -1968,20 +2101,19 @@ that at budgets above roughly a twentieth of eligible sessions the intent
 stage yields the most conversions per contact of the three despite ranking
 worst. The conclusion an organisation should draw is about \emph{how to
 choose an operating point}, not about which stage to abandon.
-Figure~\ref{fig:contributions} traces this logic for all four research
-questions, mapping each from the methodological component that makes it
-answerable, through the empirical finding, to the theoretical claim it
-licenses. The map makes the design-science character of the study explicit:
-each finding is produced by precisely the component---prefix-only features
+The same logic runs through all four research questions, each traceable from
+the methodological component that makes it answerable, through the empirical
+finding, to the theoretical claim it licenses. That chain makes the
+design-science character of the study explicit: each finding is produced by
+precisely the component---prefix-only features
 with lift as the cross-stage metric, stage-conditioned attribution,
 pre-specified validation with per-instance agreement, the static
 contrast---that conventional pipelines omit, which is the sense in which
 the artifact, and not merely the dataset, generates the knowledge. The
-map's bottom line is also its epistemic posture: three of the four
+bottom line is also the study's epistemic posture: three of the four
 pre-specified hypotheses were not supported, and all four are reported as
 found.
 
-% [fig:contributions moved to supplementary material]
 
 \subsection{Attribution migration and the staged journey}
 \label{sec:discussion-migration}
@@ -2085,7 +2217,26 @@ being computable more often, because both figures are computed only where it
 is computable. This analysis is \textbf{exploratory}; it was prompted by the
 alternative explanation rather than pre-specified.
 
-% [tab:entropy-availability moved to supplementary material]
+\begin{table}[htbp]
+\centering
+\caption{Separating definitional availability from behavioural signal for
+navigation entropy (seed 42). ``Defined'' prefixes are those spanning more
+than one category, for which the entropy feature is non-degenerate. If the
+S2 peak were an artefact of availability, the restricted share would flatten;
+it does not.}
+\label{tab:entropy-availability}
+\small
+\begin{tabular}{@{}lS[table-format=2.1]S[table-format=1.4]S[table-format=1.4]@{}}
+\toprule
+\textbf{Stage} & {\textbf{Prefixes defined (\%)}} &
+{\textbf{Attribution share, all}} & {\textbf{Attribution share, defined only}} \\
+\midrule
+S1 & 16.5 & 0.0051 & 0.0184 \\
+S2 & 38.7 & 0.1340 & 0.2016 \\
+S3 & 10.7 & 0.0075 & 0.0431 \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 The behavioural reading therefore survives the correction, though with a
 qualification worth stating: availability and attribution peak at the same

@@ -1,0 +1,5 @@
+Prediction and explanation share one constraint: the prefix visible at decision time
+Ranking quality and targeting value order the funnel stages differently
+Contact budget, not stage, decides where model-driven targeting pays
+A fixed-cohort test shows the funnel decline is composition, not information
+A permutation null separates real attribution from feature geometry
