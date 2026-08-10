@@ -519,7 +519,7 @@ def diagram_contributions(directory: Path = FIGURES) -> list[Path]:
          "The funnel effect is\ncomposition, not\nlost information", BLUE),
         (48, "RQ2\nAttribution\nmigration",
          "Stage-conditioned\nTreeSHAP with fixed\ncorrelation grouping",
-         "Entropy 0.035→0.224\n→0.074 (non-monotone)\nH2 partly supported",
+         "Entropy 0.035→0.224\n→0.074; only S2 clears\na permutation null",
          "Exploration is a\nstage-specific mode,\nnot a decaying trend", ORANGE),
         (28, "RQ3\nFaithfulness\nand stability",
          "Pre-registered thresholds;\nper-instance as well as\naggregate agreement",

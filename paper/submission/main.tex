@@ -68,10 +68,9 @@ the decision point. We propose Funnel-Stage SHAP, which holds
 prediction and explanation to one temporal constraint: at each funnel stage a
 model is fitted on the event prefix observable at that stage's cut-point,
 attributions are computed from exactly that prefix, and a validation layer
-tests faithfulness, stability and reproducibility. Following a design science
-methodology, the artifact is instantiated on 42.4 million clickstream events;
-a seeded 200,000-user subsample yields 485,459 sessions, alongside a
-12,330-session public benchmark.
+tests their faithfulness, stability and reproducibility. Following a design
+science methodology, the artifact is instantiated on 42.4 million clickstream
+events yielding 485,459 sessions.
 
 The central finding is that a stage's ranking quality and its targeting value
 are distinct quantities that order the stages differently. Across contact
@@ -81,11 +80,11 @@ $0.114 \pm 0.013$ against $0.093 \pm 0.002$ at a 10\% budget), while
 top-decile lift falls monotonically (2.27, 1.64, 1.22). Which stage to target
 is unanswerable without naming the budget.
 
-Three pre-specified expectations fail: prevalence-normalised skill declines
-(lift 1.79 to 1.09), attribution migrates non-monotonically with navigation
-entropy peaking mid-funnel (3.5\%, 22.4\%, 7.4\%), and paradigms agreeing in
-aggregate disagree per customer. A fixed-cohort test attributes the first to
-population composition rather than to information.
+Three pre-specified expectations fail, and two follow-up tests establish what
+the failures mean. A fixed-cohort evaluation attributes the declining skill to
+population composition rather than to information. A label-permutation null
+shows that only the mid-funnel navigation peak (3.5\%, 22.4\%, 7.4\%) carries
+attribution a permuted model cannot manufacture.
 \end{abstract}
 
 \noindent\textbf{Keywords:} explainable AI; SHAP; purchase prediction;
@@ -1207,24 +1206,109 @@ rising from 3.5\% to 22.4\% at consideration before falling back to
 7.4\%---most informative precisely when customers compare alternatives. In
 Figure~\ref{fig:migration} this appears as the sharpest mid-funnel peak in
 the panel, and Section~\ref{sec:results-rq4} shows empirically that a
-whole-session model does not recover it. \emph{Price} remains influential at every stage (43.7\%,
-23.9\%, 37.9\%), indicating that price context conditions the journey
-throughout rather than operating only at selection; its dip at
-consideration mirrors, almost exactly, the navigation peak, suggesting that
-mid-funnel the model temporarily trades contextual evidence for behavioural
-evidence before returning to price as the decisive signal at intent.
+whole-session model does not recover it. \emph{Price} carries the largest
+nominal share at every stage (43.7\%, 23.9\%, 37.9\%). The paragraph below
+shows that this particular trajectory does not survive a permutation null and
+should not be interpreted, which is why it is described here and not built
+upon.
 
-\textbf{H2 is partially supported.} Its behavioural component holds
-directionally---engagement gains mass across stages. Its contextual
-component is untestable: Dataset~B contains no traffic-source or device
-variables, and rather than proxy them we report the sub-hypothesis as
-untested. The apparent tension with the ablation---navigation entropy
-receives 22.4\% of S2 attribution yet adds no detectable unique predictive
-value---is the predicted consequence of correlated families sharing
-information (Section~\ref{sec:results-ablation}), not a contradiction:
-ablation measures unique contribution after accounting for the rest of the
-model, while Shapley attribution allocates credit among correlated
-features.
+\paragraph{Which of these trajectories carries information?} A Shapley value
+is faithful to the model, not to the world, and the stage models have modest
+discriminative skill. A model with little skill can be explained perfectly
+faithfully while its attributions describe only the covariance structure of
+the feature matrix: a block of correlated, high-variance features will absorb
+credit whether or not it predicts anything. Faithfulness, stability and
+reproducibility are all silent on this, because an attribution can be
+faithful, stable, reproducible and empty. We therefore refit each stage on
+permuted labels and recompute the same grouped shares against the same
+reference grouping, twenty times. Under permutation no feature can carry
+information about the outcome, so whatever share survives is what the pipeline
+manufactures from feature geometry alone. This test is \textbf{exploratory}.
+
+The null is not near zero, which is the first thing worth reporting: permuted
+models still place 41.8\% of attribution on engagement and 39.0\% on price at
+S1. Judged against it (Table~\ref{tab:permutation}), the trajectories separate
+into three groups.
+
+\begin{table}[htbp]
+\centering
+\caption{Observed grouped attribution against a label-permutation null, twenty
+rounds. $z$ is the observed share in null standard deviations; $p$ is the
+proportion of null rounds reaching the observed share, with the add-one
+correction, so 0.048 is the smallest value twenty rounds can express and means
+the observed share exceeded every draw. Observed shares are recomputed at the
+null's explanation budget so that sample size cannot confound the comparison,
+and differ in the third decimal from the full-budget shares reported in the
+supplementary migration table. Source:
+\texttt{permutation\_null\_gap30s200000.csv}.}
+\label{tab:permutation}
+\small
+\begin{tabular}{@{}llccrc@{}}
+\toprule
+\textbf{Stage} & \textbf{Family} & \textbf{Observed} & \textbf{Null (mean $\pm$ sd)}
+& \textbf{$z$} & \textbf{$p$} \\
+\midrule
+S1 & Product views / revisits & 0.193 & $0.032 \pm 0.007$ & $+23.3$ & 0.048 \\
+S2 & Navigation / categories  & 0.224 & $0.118 \pm 0.023$ & $+4.7$  & 0.048 \\
+S3 & Hour of day              & 0.131 & $0.092 \pm 0.007$ & $+5.6$  & 0.048 \\
+S2 & Hour of day              & 0.124 & $0.079 \pm 0.011$ & $+4.0$  & 0.048 \\
+S1 & Hour of day              & 0.158 & $0.105 \pm 0.019$ & $+2.7$  & 0.048 \\
+\midrule
+S3 & Price context            & 0.372 & $0.287 \pm 0.031$ & $+2.8$  & 0.095 \\
+S1 & Price context            & 0.437 & $0.390 \pm 0.078$ & $+0.6$  & 0.286 \\
+S1 & Navigation / categories  & 0.034 & $0.026 \pm 0.008$ & $+1.0$  & 0.238 \\
+\midrule
+S2 & Engagement / temporal    & 0.370 & $0.479 \pm 0.035$ & $-3.1$  & 1.000 \\
+S3 & Engagement / temporal    & 0.347 & $0.429 \pm 0.026$ & $-3.1$  & 1.000 \\
+S1 & Engagement / temporal    & 0.168 & $0.418 \pm 0.097$ & $-2.6$  & 1.000 \\
+S3 & Navigation / categories  & 0.074 & $0.085 \pm 0.012$ & $-0.9$  & 0.857 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{The mid-funnel navigation peak survives, and the test sharpens it.}
+Navigation attribution at S2 is 0.224 against a null of $0.118 \pm 0.023$,
+above every one of the twenty draws. At S1 it sits inside the null
+($z = +1.0$) and at S3 below it ($z = -0.9$). The peak is therefore not merely
+higher than its neighbours: it is the only stage at which navigation carries
+information the permutation cannot manufacture, while the low flanking values
+are what feature geometry alone produces. Browsing breadth at exploration is
+the strongest attribution signal in the study by a wide margin
+($z = +23.3$), and hour of day clears the null at every stage, though its
+shares are small.
+
+\textbf{Two claims do not survive, and are withdrawn.} The first is price
+context. Its 43.7\% share at exploration is the largest single number in the
+attribution table and it is \emph{not} distinguishable from the permutation
+null ($0.390 \pm 0.078$, $p = 0.286$); at consideration it falls below the
+null, and at intent it does not clear the threshold either ($p = 0.095$). Price
+features are strongly inter-correlated and high-variance, which is exactly the
+profile that absorbs Shapley credit without predicting, and the earlier reading
+that ``price context conditions the journey throughout'' is an artefact of that
+absorption. The second is engagement. Its observed share sits \emph{below} the
+null at all three stages, and the null reproduces the same rise-then-plateau
+shape (41.8, 47.9, 42.9) that the observed trajectory shows (16.9, 36.8, 33.8).
+The engagement trajectory is a property of the feature block, not of the
+journey.
+
+\textbf{H2 is not supported.} Its behavioural component predicted that
+engagement features would gain attribution mass across stages; they do rise,
+but the permutation null rises with them and sits above them throughout, so the
+observed trajectory is not evidence of the predicted mechanism. Its contextual
+component remains untestable, since Dataset~B contains no traffic-source or
+device variables and we decline to proxy them. What survives from RQ2 is
+narrower and better evidenced than the original hypothesis: attribution does
+migrate, and one family---navigation and category behaviour---carries
+stage-specific information that peaks mid-funnel and is absent at either end.
+
+The apparent tension with the ablation---navigation entropy receives 22.4\% of
+S2 attribution yet adds no detectable unique predictive value---is the
+predicted consequence of correlated families sharing information, not a
+contradiction: ablation measures unique contribution after accounting for the
+rest of the model, while Shapley attribution allocates credit among correlated
+features. The permutation null is what distinguishes the two cases, since it
+separates credit a family receives because it predicts from credit it receives
+because of where it sits in the correlation structure.
 
 Because stage populations differ (Section~\ref{sec:results-descriptive}),
 trajectories are read as stage-conditioned explanation profiles rather than
@@ -1306,10 +1390,12 @@ The attribution profile shows where the fair comparator puts its weight, and
 the pattern is a redistribution rather than an averaging. Engagement and
 temporal behaviour --- dwell time, click velocity, inter-event gaps --- takes
 45.5\% of the whole-session model's explanatory mass, more than the 36.8\% it
-reaches at its own best stage. Every other family loses prominence. Price
-context, which carries 43.7\% at exploration, falls to 7.3\%. Navigation and
-category behaviour, which peaks at 22.4\% mid-funnel, falls to 4.1\%; hour of
-day falls from 15.7\% to 3.8\%. The remaining 24.1\% of the mass sits on
+reaches at its own best stage. Every other family loses prominence. Navigation
+and category behaviour, which peaks at 22.4\% mid-funnel and is the one
+trajectory that clears the permutation null there, falls to 4.1\%; hour of day
+falls from 15.7\% to 3.8\%; price context falls from 43.7\% to 7.3\%, though
+that particular contrast should be read with the caution
+Section~\ref{sec:results-migration} attaches to price. The remaining 24.1\% of the mass sits on
 features that exist only for a complete session --- total event and view
 counts, a purchase-intent composite, and session-level timing spreads ---
 which have no counterpart in the stage vocabulary and are therefore reported
@@ -1595,24 +1681,24 @@ this study.}
 \textbf{Decision risk} \\
 \midrule
 S1 \newline exploration &
-Price context (43.7\%), product views (19.2\%) &
-Price and browsing breadth carry most attribution; the model is selective
+Product views / revisits (19.2\%) &
+The only S1 family that clears the permutation null, and by the widest margin
+in the study ($z = +23.3$); the model is also selective here
 (flag rate 0.174, $F_1$ margin $+0.065$) &
 This is where targeting adds most per contact under a small budget
 (incremental precision 0.215 at a 1\% flag rate) &
-The attributed features are \texttt{price\_max}, \texttt{price\_mean} and
-\texttt{n\_unique\_products}, so the lever is the \emph{price range and
-breadth of the first two product impressions}: seeding entry results with a
-wider price spread, or surfacing a lower-priced alternative alongside the
-first item viewed &
+The attributed feature is \texttt{n\_unique\_products}, so the lever is the
+\emph{breadth of the first two product impressions}: widening the range of
+distinct products surfaced at entry. Price features carry a larger nominal
+share but do not clear the null, so no price lever is claimed &
 $\approx$6 false positives per true positive; discounting visitors who would
 convert unaided; changing entry assortment affects all visitors, not only
 those flagged \\
 \addlinespace
 S2 \newline consideration &
-Engagement/temporal (36.8\%), navigation entropy (22.4\%) &
-Comparison behaviour peaks here; navigation attribution triples from S1 and
-falls again by S3 &
+Navigation entropy (22.4\%) &
+Comparison behaviour peaks here: navigation attribution triples from S1, falls
+again by S3, and clears the permutation null only at this stage &
 Comparison support is indicated at this stage specifically, and only a
 stage-conditioned analysis reveals it &
 The attributed features are \texttt{category\_entropy} and
@@ -2026,11 +2112,14 @@ prediction and explanation should share informational constraints by
 architecture, not convention: an explanation layer bolted onto a
 whole-session model can cite behaviour that postdates the decision point,
 and no amount of visualisation repairs that. Second, intervention design
-can key on the stage-conditioned profiles: at exploration, price context
-and browsing breadth dominate, favouring assortment and price-transparency
-interventions; at consideration, navigation and engagement dominate,
-favouring comparison support; at intent, engagement consolidates and
-attribution stabilises. Third, an operating point is a decision variable and
+can key on the stage-conditioned profiles, but only on the parts of them that
+clear a permutation null: browsing breadth at exploration, favouring
+assortment interventions, and cross-category comparison at consideration,
+favouring comparison support. The families with the largest nominal shares ---
+price context and engagement --- do not clear it, and an intervention designed
+around them would be designed around the correlation structure of the feature
+matrix. That distinction is not visible in a conventional attribution report,
+and drawing it is part of what the validation layer is for. Third, an operating point is a decision variable and
 should be reported as one. The same intent-stage model looks worthless or
 best-in-class depending on whether its threshold is chosen by $F_1$ or by
 budget, so a decision-support system should expose the flag rate to the
@@ -2203,9 +2292,9 @@ redistributed with the repository.
 
 The study was conducted under a protocol version-frozen before the test
 partition was opened. Every deviation is recorded in a dated amendment log
-distributed with the manuscript, 44 entries at the time of submission,
+distributed with the manuscript, 45 entries at the time of submission,
 including three cut-point redefinitions made on the basis of measurement,
-one reversal of a reported hypothesis verdict, and three claims retracted
+one reversal of a reported hypothesis verdict, and five claims retracted
 after further analysis contradicted them. The protocol document, the
 amendment log, an element-by-element alignment matrix mapping each frozen
 protocol item to where the manuscript reports it, the variable dictionary,

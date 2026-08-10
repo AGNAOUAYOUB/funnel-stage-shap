@@ -1368,3 +1368,73 @@ argument.
 Tests: `tests/test_common_cohort.py` gains coverage for id alignment and for the paired
 interval; the CLI gains `--n-resamples` and `--retrain-on-cohort`, and a DVC stage.
 
+
+### A45. Permutation null for attribution: the S2 peak survives, price and engagement do not (Sec. 11.1, 15)
+
+**Date:** 2026-08-10. **Status:** exploratory; retracts part of the RQ2 reading and the H2 verdict.
+
+SHAP is faithful to the model, not to the world. The stage models have modest discriminative
+skill, and a model with little skill can be explained perfectly faithfully while its
+attributions describe only the covariance structure of the feature matrix: a block of
+correlated, high-variance features absorbs Shapley credit whether or not it predicts. Every
+validation arm the study already ran -- faithfulness, deletion/insertion, Lipschitz
+stability, cross-seed reproducibility -- is silent on this, because an attribution can be
+faithful, stable, reproducible and empty.
+
+Each stage was refit on labels permuted within the stage, twenty times, and the same grouped
+shares recomputed against the same reference grouping. The observed run uses the same reduced
+explanation budget (1,500 rows, 500 background) so sample size cannot confound the contrast.
+
+**The null is not near zero.** Permuted models still place 41.8% of attribution on
+engagement and 39.0% on price at S1. That alone justifies the test: a share of 0.44 sounds
+decisive and is roughly what chance produces for that family.
+
+| | Observed | Null (mean Â± sd) | z | p |
+|---|---|---|---|---|
+| S1 product views | 0.193 | 0.032 Â± 0.007 | +23.3 | 0.048 |
+| S2 navigation | 0.224 | 0.118 Â± 0.023 | +4.7 | 0.048 |
+| S3 hour of day | 0.131 | 0.092 Â± 0.007 | +5.6 | 0.048 |
+| S3 price | 0.372 | 0.287 Â± 0.031 | +2.8 | 0.095 |
+| S1 price | 0.437 | 0.390 Â± 0.078 | +0.6 | 0.286 |
+| S1 navigation | 0.034 | 0.026 Â± 0.008 | +1.0 | 0.238 |
+| S2 engagement | 0.370 | 0.479 Â± 0.035 | -3.1 | 1.000 |
+| S3 engagement | 0.347 | 0.429 Â± 0.026 | -3.1 | 1.000 |
+| S1 engagement | 0.168 | 0.418 Â± 0.097 | -2.6 | 1.000 |
+| S3 navigation | 0.074 | 0.085 Â± 0.012 | -0.9 | 0.857 |
+
+**The mid-funnel navigation peak survives and is sharpened.** S2 navigation exceeds all
+twenty null draws. At S1 it sits inside the null and at S3 below it, so the peak is the only
+point at which navigation carries information the permutation cannot manufacture, and the low
+flanking values are what geometry alone gives. Browsing breadth at S1 is the strongest
+attribution signal in the study (z = +23.3). Hour of day clears the null at all three stages,
+though its shares are small.
+
+**Two readings are withdrawn.**
+
+*Price context.* Its 43.7% at S1 is the largest number in the attribution table and is not
+distinguishable from the null (0.390 Â± 0.078, p = 0.286); at S2 it is below the null and at
+S3 it does not clear (p = 0.095). Price features are strongly inter-correlated and
+high-variance, exactly the profile that absorbs credit without predicting. "Price context
+conditions the journey throughout" is withdrawn, and the S1 intervention row of Table 12 no
+longer claims a price lever -- only breadth of first impressions, which is what clears.
+
+*Engagement.* Observed shares sit *below* the null at all three stages, and the null
+reproduces the same rise-then-plateau shape (41.8, 47.9, 42.9) as the observed trajectory
+(16.9, 36.8, 33.8). The engagement trajectory is a property of the feature block.
+
+**H2 is now not supported** rather than partially supported. Its behavioural component
+predicted engagement would gain attribution mass across stages; it rises, but the null rises
+with it and sits above it throughout, so the trajectory is not evidence of the predicted
+mechanism. The contextual component remains untestable. What survives from RQ2 is narrower
+and better evidenced: attribution migrates, and navigation and category behaviour carries
+stage-specific information peaking mid-funnel and absent at either end.
+
+**Bearing on the ablation tension.** Navigation receives 22.4% of S2 attribution while adding
+no detectable unique predictive value. The permutation null is what separates the two cases:
+it distinguishes credit a family receives because it predicts from credit it receives because
+of where it sits in the correlation structure.
+
+The test is 20 rounds, so p = 0.048 is the smallest value it can express; it establishes
+which families clear a null and cannot resolve finer differences. Implemented in
+`explain/permutation_null.py`, CLI `permutation-null`, with a DVC stage.
+
