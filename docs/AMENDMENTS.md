@@ -1319,3 +1319,52 @@ the dominant lever everywhere and does not surface where the lever changes.
 measurement of the leakage; the RQ4 row of the contribution figure
 (`report/diagrams.py`), which still carried the retracted 11.1% stage-average.
 
+
+### A44. The fixed-cohort comparison repeated the A20b inference error; corrected (Sec. 11, 15)
+
+**Date:** 2026-08-10. **Status:** correction to A41, which is otherwise unchanged.
+
+A41 concluded that the funnel decline vanishes on a fixed cohort and added that the intent
+stage "rises slightly", judging lift (1.047 / 1.032 / 1.066) and ROC-AUC (0.516 / 0.517 /
+0.547) against seed standard deviations of 0.005-0.012. **That is the comparison A20b records
+as invalid**, made again. Seed dispersion measures how far the fit moves under reseeding on
+the same rows; the question is how far the estimate would move on another sample of
+customers, and on 821 sessions at an AUC near one half the second is several times the first.
+
+Stratified bootstrap intervals over the cohort (2,000 resamples, shared across stages so
+paired differences use the same resampled customers) give:
+
+| Comparison | Lift | ROC-AUC |
+|---|---|---|
+| S2 - S1 | -0.018 [-0.109, +0.073] | +0.003 [-0.038, +0.043] |
+| S3 - S1 | +0.023 [-0.080, +0.129] | +0.034 [-0.018, +0.084] |
+| S3 - S2 | +0.042 [-0.063, +0.150] | +0.031 [-0.019, +0.084] |
+
+**Every pairwise interval contains zero.** The three stages are not distinguishable from one
+another; S1 and S2 are not distinguishable from chance either (their level intervals include
+lift 1 and ROC-AUC 0.5), and only S3 excludes the no-skill value, marginally. The "rises
+slightly" claim is withdrawn. A41's substantive conclusion is unaffected and arguably
+strengthened: what it needs is that the decline *vanishes*, not that it reverses.
+
+**Prior-probability shift addressed.** Applying the S1 and S2 models where prevalence is
+0.463 rather than 0.073 and 0.059 is a covariate shift, so their calibration on the cohort is
+meaningless and only ranking metrics survive there. Refitting each stage on cohort members
+alone (`--retrain-on-cohort`) removes the shift and changes nothing: lift 1.002 / 1.012 /
+1.047, every pairwise interval again contains zero (S3 - S1 lift +0.053 [-0.023, +0.138]),
+S1 and S2 again include the no-skill value, S3 again excludes it marginally.
+
+**A defect found by the new guard.** The bootstrap requires the stages to be paired customer
+by customer. Each stage's feature frame carries its own row order, so the cohort is the same
+customers in a different sequence at every stage, and positional pairing would have compared
+one customer's score against another's label. `CohortRun` now carries the evaluated session
+ids and `bootstrap_cohort` aligns on them; the check that caught this raises rather than
+warns.
+
+Reported intervals for the *levels* sit slightly above their point estimates, because average
+precision is upward-biased when a small sample is resampled with replacement. The paired
+differences, where the bias enters both terms, are unaffected, and the differences carry the
+argument.
+
+Tests: `tests/test_common_cohort.py` gains coverage for id alignment and for the paired
+interval; the CLI gains `--n-resamples` and `--retrain-on-cohort`, and a DVC stage.
+

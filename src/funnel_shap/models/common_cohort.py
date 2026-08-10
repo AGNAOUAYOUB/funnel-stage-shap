@@ -59,6 +59,12 @@ class CohortRun:
     lift: float
     scores: np.ndarray = field(repr=False, default=None)
     y_true: np.ndarray = field(repr=False, default=None)
+    #: Session ids of the evaluated rows, in the same order as ``scores``. Each
+    #: stage's feature frame carries its own row order, so the cohort is the
+    #: same set of customers in a different sequence at every stage. Any paired
+    #: comparison must align on these ids; comparing the arrays positionally
+    #: would pair one customer's score with another's label.
+    session_ids: list[str] = field(repr=False, default=None)
 
 
 def common_cohort_ids(features_by_stage: dict[StageName, pl.DataFrame]) -> set[str]:
@@ -87,12 +93,22 @@ def run_common_cohort(
     feature_set: str = "full",
     imbalance: str = "class_weight",
     calibration_fraction: float = 0.20,
+    restrict_training_to_cohort: bool = False,
 ) -> list[CohortRun]:
     """Fit each stage as usual, then evaluate all stages on the shared cohort.
 
-    Training is deliberately unchanged: a stage model should be built the way
-    the paper builds it, or the comparison would test a different artefact.
-    Only the evaluation population is held fixed.
+    Training is deliberately unchanged by default: a stage model should be built
+    the way the paper builds it, or the comparison would test a different
+    artefact. Only the evaluation population is held fixed.
+
+    That default carries a cost worth naming. A model trained where prevalence
+    is 0.089 and scored where it is 0.463 is being applied under
+    prior-probability shift, so its calibration on the cohort is meaningless and
+    its ranking is arguably out of domain. Ranking metrics are invariant to a
+    monotone recalibration, so the comparison survives --- but only as a
+    comparison of *rankings*. Setting ``restrict_training_to_cohort`` refits each
+    stage on cohort members alone, which removes the shift at the cost of a much
+    smaller training set; reporting both is what separates the two objections.
     """
     split = load_split(suffix, protocol)
     cohort = common_cohort_ids(features_by_stage)
@@ -111,16 +127,22 @@ def run_common_cohort(
         )
         y = joined["label"].cast(pl.Int8).to_numpy()
         partition = joined["partition"].to_numpy()
-        in_cohort = np.array(
-            [s in cohort for s in joined["session_id"].to_list()], dtype=bool
-        )
+        session_ids = joined["session_id"].to_list()
+        in_cohort = np.array([s in cohort for s in session_ids], dtype=bool)
 
         train_mask = partition == "train"
+        if restrict_training_to_cohort:
+            train_mask = train_mask & in_cohort
         # The evaluation set is the shared cohort inside the test partition, so
         # the split discipline is preserved: the test partition still opens once.
         eval_mask = (partition == "test") & in_cohort
         if not eval_mask.any() or y[eval_mask].sum() == 0:
             continue
+        if train_mask.sum() < 2 or y[train_mask].sum() == 0:
+            raise ValueError(
+                f"stage {stage} has no usable training rows inside the cohort; "
+                "a silently skipped stage would read as a missing comparison"
+            )
 
         available = feature_names(stage)
         columns = [
@@ -161,10 +183,147 @@ def run_common_cohort(
                     lift=pr_auc / prevalence if prevalence else float("nan"),
                     scores=scores,
                     y_true=y_eval,
+                    session_ids=[
+                        s for s, keep in zip(session_ids, eval_mask, strict=True) if keep
+                    ],
                 )
             )
 
     return runs
+
+
+def bootstrap_cohort(
+    runs: list[CohortRun],
+    *,
+    n_resamples: int = 2000,
+    seed: int = 42,
+    alpha: float = 0.05,
+) -> pl.DataFrame:
+    """Stratified bootstrap intervals over the cohort, per stage and pairwise.
+
+    The seed standard deviations reported by :func:`cohort_table` measure how
+    much the *fit* moves when the random seed changes. They say nothing about
+    how much the *estimate* would move on another sample of customers, and on a
+    cohort of a few hundred sessions with an AUC near one half the second is far
+    larger than the first. Judging a between-stage difference against seed
+    dispersion is the same mistake the amendment log records under A18, so the
+    cohort comparison is made against resampling intervals instead.
+
+    Resampling is stratified by label and shared across stages: every stage sees
+    the same resampled customers in the same draw, which is what makes the
+    paired difference interval meaningful. Scores are held fixed --- this is
+    uncertainty about the evaluation sample, not about the fit, and the seed
+    dispersion already covers the latter.
+    """
+    if not runs:
+        raise ValueError("no cohort runs to resample")
+
+    by_stage: dict[StageName, list[CohortRun]] = {}
+    for run in runs:
+        by_stage.setdefault(run.stage, []).append(run)
+
+    # Align every stage on session id before anything is compared. The stages
+    # hold the same customers in different row orders, so positional pairing
+    # would compare one customer's score against another's label.
+    if any(run.session_ids is None for run in runs):
+        raise ValueError(
+            "cohort runs carry no session ids; they predate the alignment fix "
+            "and cannot be paired"
+        )
+    reference = sorted(by_stage[next(iter(by_stage))][0].session_ids)
+    order = {sid: i for i, sid in enumerate(reference)}
+
+    def aligned(run: CohortRun) -> tuple[np.ndarray, np.ndarray]:
+        if sorted(run.session_ids) != reference:
+            raise ValueError(
+                f"stage {run.stage} was evaluated on a different set of sessions; "
+                "the cohort is not shared and a paired interval would be meaningless"
+            )
+        index = np.array([order[s] for s in run.session_ids])
+        scores = np.empty_like(run.scores)
+        labels = np.empty_like(run.y_true)
+        scores[index] = run.scores
+        labels[index] = run.y_true
+        return scores, labels
+
+    y = None
+    # Seed-averaged scores per stage: the question here is whether the stages
+    # differ, not whether the seeds do.
+    mean_scores: dict[StageName, np.ndarray] = {}
+    for stage, stage_runs in by_stage.items():
+        per_seed = []
+        for run in stage_runs:
+            scores, labels = aligned(run)
+            if y is None:
+                y = labels
+            elif not np.array_equal(labels, y):
+                raise ValueError(
+                    f"stage {stage} carries different labels for the same sessions"
+                )
+            per_seed.append(scores)
+        mean_scores[stage] = np.mean(per_seed, axis=0)
+
+    rng = np.random.default_rng(seed)
+    positives = np.flatnonzero(y == 1)
+    negatives = np.flatnonzero(y == 0)
+
+    stages = [s for s in MODELLING_STAGES if s in by_stage]
+    draws: dict[str, list[float]] = {f"lift.{s}": [] for s in stages}
+    draws.update({f"roc_auc.{s}": [] for s in stages})
+    for i, a in enumerate(stages):
+        for b in stages[i + 1 :]:
+            draws[f"lift.{b}-{a}"] = []
+            draws[f"roc_auc.{b}-{a}"] = []
+
+    for _ in range(n_resamples):
+        idx = np.concatenate(
+            [
+                rng.choice(positives, size=positives.size, replace=True),
+                rng.choice(negatives, size=negatives.size, replace=True),
+            ]
+        )
+        y_b = y[idx]
+        prevalence = float(y_b.mean())
+        lift, roc = {}, {}
+        for stage in stages:
+            s_b = mean_scores[stage][idx]
+            lift[stage] = float(average_precision_score(y_b, s_b)) / prevalence
+            roc[stage] = float(roc_auc_score(y_b, s_b))
+            draws[f"lift.{stage}"].append(lift[stage])
+            draws[f"roc_auc.{stage}"].append(roc[stage])
+        for i, a in enumerate(stages):
+            for b in stages[i + 1 :]:
+                draws[f"lift.{b}-{a}"].append(lift[b] - lift[a])
+                draws[f"roc_auc.{b}-{a}"].append(roc[b] - roc[a])
+
+    rows = []
+    for name, values in draws.items():
+        metric, target = name.split(".", 1)
+        arr = np.asarray(values)
+        is_difference = "-" in target
+        rows.append(
+            {
+                "metric": metric,
+                "target": target,
+                "kind": "difference" if is_difference else "level",
+                "mean": round(float(arr.mean()), 4),
+                "lo": round(float(np.quantile(arr, alpha / 2)), 4),
+                "hi": round(float(np.quantile(arr, 1 - alpha / 2)), 4),
+                # For a difference, whether the interval clears zero; for a
+                # level, whether it clears the no-skill value.
+                "excludes_null": bool(
+                    (np.quantile(arr, alpha / 2) > 0 or np.quantile(arr, 1 - alpha / 2) < 0)
+                    if is_difference
+                    else (
+                        np.quantile(arr, alpha / 2) > (1.0 if metric == "lift" else 0.5)
+                        or np.quantile(arr, 1 - alpha / 2)
+                        < (1.0 if metric == "lift" else 0.5)
+                    )
+                ),
+                "n_resamples": n_resamples,
+            }
+        )
+    return pl.DataFrame(rows)
 
 
 def cohort_table(runs: list[CohortRun]) -> pl.DataFrame:

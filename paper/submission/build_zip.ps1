@@ -15,6 +15,7 @@ if (Test-Path $staging) { Remove-Item $staging -Recurse -Force }
 New-Item -ItemType Directory -Path (Join-Path $staging "figures") -Force | Out-Null
 
 Copy-Item (Join-Path $here "main.tex")       $staging
+Copy-Item (Join-Path $here "supplement.tex") $staging
 Copy-Item (Join-Path $here "references.bib") $staging
 Copy-Item (Join-Path $here "README.md")      $staging
 Copy-Item (Join-Path (Split-Path -Parent $here) "figures\*.pdf") (Join-Path $staging "figures")

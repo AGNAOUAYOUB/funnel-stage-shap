@@ -979,6 +979,13 @@ def common_cohort_cmd(
     protocol: str = "temporal",
     model: str = "lightgbm",
     seeds: str = typer.Option("", help="Comma-separated subset of the frozen seed list"),
+    n_resamples: int = typer.Option(
+        2000, help="Stratified bootstrap draws over the cohort (protocol Sec. 4.2 floor)"
+    ),
+    retrain_on_cohort: bool = typer.Option(
+        False,
+        help="Refit each stage on cohort members only, removing prior-probability shift",
+    ),
     track: bool = typer.Option(True, help="Log the run to MLflow (Sec. 6.2)"),
 ) -> None:
     """Score every stage model on the sessions that reach every stage.
@@ -990,7 +997,12 @@ def common_cohort_cmd(
     paths.ensure_dirs()
 
     from .data.journey import MODELLING_STAGES
-    from .models.common_cohort import cohort_table, common_cohort_ids, run_common_cohort
+    from .models.common_cohort import (
+        bootstrap_cohort,
+        cohort_table,
+        common_cohort_ids,
+        run_common_cohort,
+    )
     from .seeds import SEEDS
 
     features = {}
@@ -1005,16 +1017,26 @@ def common_cohort_cmd(
     typer.echo(f"cohort: {len(common_cohort_ids(features)):,} sessions reach every stage")
 
     runs = run_common_cohort(
-        features, suffix=suffix, protocol=protocol, model=model, seeds=chosen_seeds
+        features, suffix=suffix, protocol=protocol, model=model, seeds=chosen_seeds,
+        restrict_training_to_cohort=retrain_on_cohort,
     )
+    tag = f"{suffix}_retrained" if retrain_on_cohort else suffix
     table = cohort_table(runs)
-    out = paths.TABLES / f"common_cohort_{suffix}.csv"
+    out = paths.TABLES / f"common_cohort_{tag}.csv"
     table.write_csv(out)
 
     typer.echo("")
     typer.echo(table)
+
+    # Seed dispersion measures the fit; it is not a yardstick for a difference
+    # between stages on a few hundred sessions. The intervals are.
+    intervals = bootstrap_cohort(runs, n_resamples=n_resamples)
+    ci_out = paths.TABLES / f"common_cohort_ci_{tag}.csv"
+    intervals.write_csv(ci_out)
     typer.echo("")
-    typer.echo(f"-> {out}")
+    typer.echo(intervals)
+    typer.echo("")
+    typer.echo(f"-> {out}\n-> {ci_out}")
 
     from .tracking import track_run
 
@@ -1033,6 +1055,67 @@ def common_cohort_cmd(
                 f"pr_auc.{row['stage']}": row["pr_auc_mean"],
                 f"roc_auc.{row['stage']}": row["roc_auc_mean"],
             })
+        run.log_artifact(out)
+
+
+@app.command("permutation-null")
+def permutation_null_cmd(
+    suffix: str = _SUFFIX_OPT,
+    protocol: str = "temporal",
+    n_rounds: int = typer.Option(20, help="Permutation rounds"),
+    seed: int = 42,
+    max_explain: int = typer.Option(1500, help="Rows explained per stage, observed and null"),
+    background_size: int = typer.Option(500, help="TreeSHAP background sample"),
+    track: bool = typer.Option(True, help="Log the run to MLflow (Sec. 6.2)"),
+) -> None:
+    """Test whether the attribution trajectory survives label permutation.
+
+    SHAP is faithful to the model, and a model with little discriminative skill
+    can be faithfully explained while its attributions carry no information
+    about the outcome. This refits each stage on shuffled labels and compares
+    the grouped shares against the observed ones.
+    """
+    paths.ensure_dirs()
+
+    from .data.journey import MODELLING_STAGES
+    from .explain.permutation_null import null_table, run_permutation_null
+
+    features = {}
+    for stage in MODELLING_STAGES:
+        path = paths.PROCESSED / f"features_{suffix}_{stage}.parquet"
+        if path.exists():
+            features[stage] = pl.read_parquet(path)
+    if not features:
+        raise typer.BadParameter(f"no stage features for suffix {suffix!r}")
+
+    observed, draws = run_permutation_null(
+        features, suffix=suffix, protocol=protocol, n_rounds=n_rounds, seed=seed,
+        max_explain=max_explain, background_size=background_size,
+    )
+    table = null_table(observed, draws)
+    out = paths.TABLES / f"permutation_null_{suffix}.csv"
+    table.write_csv(out)
+
+    typer.echo("")
+    with pl.Config(tbl_rows=40, fmt_str_lengths=44):
+        typer.echo(table)
+    typer.echo("")
+    typer.echo(f"-> {out}")
+
+    from .tracking import track_run
+
+    with track_run(
+        f"permutation-null/{suffix}",
+        experiment="permutation-null",
+        params={
+            "suffix": suffix, "protocol": protocol, "n_rounds": n_rounds,
+            "seed": seed, "max_explain": max_explain,
+            "background_size": background_size,
+        },
+        enabled=track,
+    ) as run:
+        for row in table.to_dicts():
+            run.log_metrics({f"p_value.{row['stage']}.{row['group']}": row["p_value"]})
         run.log_artifact(out)
 
 

@@ -351,6 +351,43 @@ stages:
       - reports/tables/common_cohort_gap30s200000.csv:
           cache: false
 
+  common_cohort_retrained:
+    # Amendment A44: the same fixed cohort with each stage refitted on cohort
+    # members only, which removes the prior-probability shift the default
+    # variant carries. Reported as a bound on the A41 test, not a replacement.
+    cmd: >-
+      python -m funnel_shap.cli common-cohort --suffix gap30s200000
+      --retrain-on-cohort
+    deps:
+      - data/processed/features_gap30s200000_S1.parquet
+      - data/processed/features_gap30s200000_S2.parquet
+      - data/processed/features_gap30s200000_S3.parquet
+      - data/processed/splits/split_gap30s200000_temporal.parquet
+      - src/funnel_shap/models/common_cohort.py
+    metrics:
+      - reports/tables/common_cohort_gap30s200000_retrained.csv:
+          cache: false
+      - reports/tables/common_cohort_ci_gap30s200000_retrained.csv:
+          cache: false
+
+  permutation_null:
+    # Amendment A45: does the attribution trajectory survive label permutation?
+    # SHAP is faithful to the model, so a near-chance model can be faithfully
+    # explained while its attributions carry nothing about the outcome.
+    cmd: >-
+      python -m funnel_shap.cli permutation-null --suffix gap30s200000
+      --n-rounds 20
+    deps:
+      - data/processed/features_gap30s200000_S1.parquet
+      - data/processed/features_gap30s200000_S2.parquet
+      - data/processed/features_gap30s200000_S3.parquet
+      - data/processed/splits/split_gap30s200000_temporal.parquet
+      - src/funnel_shap/explain/permutation_null.py
+      - src/funnel_shap/explain/run_stage_shap.py
+    metrics:
+      - reports/tables/permutation_null_gap30s200000.csv:
+          cache: false
+
   flag_rate_sweep:
     # Amendment A42: incremental precision across contact budgets, after the
     # F1-selected threshold proved to determine the S3 conclusion.

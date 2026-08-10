@@ -26,6 +26,23 @@ n_refs = len(re.findall(rx(r"@ref\{"), tex))
 print("PARSER SANITY  sections=%d labels=%d refs=%d" % (n_sections, n_labels, n_refs))
 assert n_sections > 0 and n_labels > 0 and n_refs > 0, "parser sees nothing - check escaping"
 
+# ---- stray control characters ----
+# The same heredoc collapse that this module's docstring warns about produced a
+# literal CR where a `\ref` belonged, which typeset as "Table eftab:sweep" and
+# was invisible to every check below, since none of them look for a `\ref` that
+# is no longer a `\ref`. A byte-level scan is the only thing that catches it.
+raw = open(TEX, "rb").read()
+control = {b: raw.count(bytes([b])) for b in range(32) if b != 10 and bytes([b]) in raw}
+if control:
+    names = {9: "TAB", 13: "CR", 12: "FF", 11: "VT", 8: "BS", 7: "BEL"}
+    print("STRAY CONTROL CHARACTERS:",
+          {names.get(b, b): n for b, n in control.items()})
+    for lineno, line in enumerate(raw.split(b"\n"), 1):
+        if any(0 <= b < 32 and b != 10 for b in line):
+            print("  line %d: %r" % (lineno, line[:90]))
+else:
+    print("stray control characters: none")
+
 # ---- citations ----
 bibkeys = set(re.findall(r"@(?:\w+)\{([^,]+),", bib))
 cited = set()

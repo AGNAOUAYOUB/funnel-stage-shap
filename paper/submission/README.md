@@ -7,11 +7,15 @@ natbib author–year citations, which renders APA-style `(Author, year)` in text
 
 ## Contents
 
-- `main.tex` — the manuscript (submission draft).
+- `main.tex` — the manuscript (submission draft). Compiles on its own.
+- `supplement.tex` — twelve supporting figures (schematics and per-stage
+  diagnostics), compiled separately as supplementary material. Shares
+  `figures/` and `references.bib` with the manuscript. Figures are numbered
+  S1–S12; no claim in the article depends on one.
 - `references.bib` — 71 unique entries. Bibliographic fields come from the
   verified project bibliography and the authors' reference-manager export.
-- `figures/` — 26 PDF figures (results figures, conceptual diagrams and the
-  appendix exhibit set), all generated from the frozen analysis pipeline.
+- `figures/` — 26 PDF figures (14 in the article, 12 in the supplement), all
+  generated from the frozen analysis pipeline.
 
 In the repository the figures are not duplicated here; they live in
 `paper/figures/` and are staged into the package by `build_zip.ps1`, which

@@ -10,6 +10,7 @@ from funnel_shap.data.journey import MODELLING_STAGES, prefix_events
 from funnel_shap.data.splits import freeze_splits
 from funnel_shap.features.prefix_features import build_stage_features
 from funnel_shap.models.common_cohort import (
+    bootstrap_cohort,
     cohort_table,
     common_cohort_ids,
     run_common_cohort,
@@ -112,3 +113,67 @@ def test_scores_and_labels_are_retained_for_downstream_sweeps(cohort_setup) -> N
     for r in runs:
         assert isinstance(r.scores, np.ndarray)
         assert r.scores.shape == r.y_true.shape == (r.n_eval,)
+        assert len(r.session_ids) == r.n_eval
+
+
+def test_stages_hold_the_same_customers_in_different_orders(cohort_setup) -> None:
+    """The reason paired comparisons must align on ids rather than position."""
+    features, directory = cohort_setup
+    runs = _run(features, directory, seeds=(7,))
+    by_stage = {r.stage: r for r in runs}
+    ids = [set(r.session_ids) for r in by_stage.values()]
+    assert all(s == ids[0] for s in ids), "the cohort is not shared"
+
+
+def test_bootstrap_aligns_on_session_id_not_position(cohort_setup) -> None:
+    """Shuffling one stage's rows must not change its interval."""
+    features, directory = cohort_setup
+    runs = _run(features, directory, seeds=(7, 17))
+    straight = bootstrap_cohort(runs, n_resamples=200, seed=3)
+
+    rng = np.random.default_rng(0)
+    shuffled = []
+    for run in runs:
+        order = rng.permutation(run.n_eval)
+        shuffled.append(
+            type(run)(
+                **{
+                    **run.__dict__,
+                    "scores": run.scores[order],
+                    "y_true": run.y_true[order],
+                    "session_ids": [run.session_ids[i] for i in order],
+                }
+            )
+        )
+    reordered = bootstrap_cohort(shuffled, n_resamples=200, seed=3)
+    assert straight.equals(reordered)
+
+
+def test_bootstrap_rejects_runs_without_session_ids(cohort_setup) -> None:
+    features, directory = cohort_setup
+    runs = _run(features, directory, seeds=(7,))
+    stripped = [type(r)(**{**r.__dict__, "session_ids": None}) for r in runs]
+    with pytest.raises(ValueError, match="no session ids"):
+        bootstrap_cohort(stripped, n_resamples=50)
+
+
+def test_bootstrap_reports_levels_and_paired_differences(cohort_setup) -> None:
+    features, directory = cohort_setup
+    runs = _run(features, directory, seeds=(7,))
+    table = bootstrap_cohort(runs, n_resamples=200)
+
+    kinds = set(table["kind"])
+    assert kinds == {"level", "difference"}
+    # An interval must contain its own resampled mean.
+    for row in table.to_dicts():
+        assert row["lo"] <= row["mean"] <= row["hi"]
+
+
+def test_training_can_be_restricted_to_the_cohort(cohort_setup) -> None:
+    """The variant that removes prior-probability shift must actually change the fit."""
+    features, directory = cohort_setup
+    wide = _run(features, directory, seeds=(7,))
+    narrow = _run(features, directory, seeds=(7,), restrict_training_to_cohort=True)
+
+    assert {r.n_eval for r in narrow} == {r.n_eval for r in wide}
+    assert all(n.n_train <= w.n_train for n, w in zip(narrow, wide, strict=True))

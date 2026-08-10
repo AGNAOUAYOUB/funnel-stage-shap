@@ -78,24 +78,32 @@ model is fitted on the event prefix observable at that stage's cut-point,
 Shapley attributions are computed from exactly that prefix, and a validation
 layer tests whether the resulting explanations are faithful, stable and
 reproducible. Following a design science methodology, the framework is
-instantiated on 42.4 million clickstream events yielding 485,459 sessions,
-with a 12,330-session benchmark for model selection. Three pre-specified
-expectations fail. Prevalence-normalised predictive skill \emph{declines}
-along the funnel (lift 1.79 to 1.09; ROC-AUC 0.641 to 0.570) rather than
-improving; attribution migrates non-monotonically, navigation entropy peaking
-at consideration (3.5\%, 22.4\%, 7.4\%); and explanation paradigms that agree
-on aggregate rankings disagree about individual customers. Two further tests
-qualify how the decline should be read. Scoring all three models on one fixed
-cohort of 821 sessions that reach every stage removes the six-fold prevalence
-difference between the conditional stage populations, and the decline
-disappears (lift 1.047, 1.032, 1.066), locating it in the composition of who
-survives to each stage rather than in the information a longer prefix
-carries. Decision value is likewise threshold-dependent: at a 10\% flag rate
-the intent stage yields the largest incremental precision of the three
-($0.114 \pm 0.013$ against $0.093 \pm 0.002$ at exploration), while
-top-decile ranking lift still falls monotonically (2.27, 1.64, 1.22).
-Explanation quality and decision value both vary by stage, and we argue that
-each should be measured there.
+instantiated on 42.4 million clickstream events; a seeded subsample of
+200,000 users yields the analytical dataset of 485,459 sessions, alongside a
+12,330-session public benchmark used for model selection.
+
+The central result is that a stage's ranking quality and its targeting value
+are different quantities that can order the stages differently. Swept across
+contact budgets, the stage that ranks worst returns the most conversions per
+contact at budgets above roughly a twentieth of eligible sessions
+(incremental precision $0.114 \pm 0.013$ at intent against $0.093 \pm 0.002$
+at exploration under a 10\% budget), while top-decile ranking lift falls
+monotonically across the same stages (2.27, 1.64, 1.22). Which stage to
+target is therefore not answerable without naming the budget, and an
+operating point chosen by a threshold-free criterion can invert the
+conclusion.
+
+Three pre-specified expectations fail, and the evidence that produced them is
+what makes the above interpretable. Prevalence-normalised skill \emph{declines}
+along the funnel (lift 1.79 to 1.09) rather than improving; attribution
+migrates non-monotonically, navigation entropy peaking at consideration
+(3.5\%, 22.4\%, 7.4\%); and explanation paradigms that agree on aggregate
+rankings disagree about individual customers. A fixed-cohort test locates the
+first in composition rather than information: scored on the 821 sessions that
+reach every stage, at one shared prevalence, the decline disappears and the
+three stages are statistically indistinguishable. Explanation quality and
+decision value both vary by stage, and we argue that each should be measured
+there.
 \end{abstract}
 
 \begin{keywords}
@@ -657,10 +665,31 @@ The study follows a design science research methodology
 phenomenon but to construct and rigorously evaluate an artifact---the
 Funnel-Stage SHAP framework---that addresses the methodological gap
 identified in Section~\ref{sec:related-gap}. Consistent with the DSR
-build--evaluate cycle (Figure~\ref{fig:dsr}), the artifact is instantiated
-end-to-end and evaluated against pre-specified hypotheses, with every
-deviation from the frozen protocol logged with date, rationale and affected
-sections (Appendix~A).
+build--evaluate--refine cycle (Figure~\ref{fig:dsr}), the artifact is
+instantiated end-to-end and evaluated against pre-specified hypotheses, with
+every deviation from the frozen protocol logged with date, rationale and
+affected sections (Appendix~A).
+
+\textbf{The study runs two cycles, and the distinction organises what follows.}
+Cycle one is confirmatory: the artifact as designed, evaluated against the four
+hypotheses fixed before the test partition was opened
+(Sections~\ref{sec:results-performance}--\ref{sec:results-h4}). Cycle two is
+the refinement that cycle one's results demanded. Three of its evaluations
+were not anticipated by the protocol because the questions they answer were
+not visible until the first cycle produced its results: a fixed-cohort
+evaluation, once the funnel decline proved to confound information with
+population composition
+(Section~\ref{sec:results-cohort}); a whole-session comparator with the
+outcome event removed, once the first such comparator proved to contain the
+label (Section~\ref{sec:results-rq4}); and a sweep over contact budgets, once
+the pre-specified threshold rule proved to determine the decision conclusion
+(Section~\ref{sec:decision-economics}). These are labelled exploratory
+throughout and listed in Appendix~\ref{app:alignment}. Refinement prompted by
+evaluation is what the DSR cycle prescribes, so the label marks where in the
+cycle a result sits rather than qualifying its standing --- but it does mean
+that cycle-two results are hypothesis-generating, and a reader weighting
+confirmatory and exploratory evidence differently should weight them
+accordingly.
 
 \begin{figure}[htbp]
 \centering
@@ -1128,40 +1157,60 @@ Table~\ref{tab:cohort}. This analysis is \textbf{exploratory}: the protocol
 specified conditional-population evaluation and did not anticipate a fixed
 cohort (Appendix~\ref{app:alignment}).
 
+Inference here must not rest on the seed standard deviations used elsewhere in
+this section. Those measure how far the \emph{fit} moves when the random seed
+changes; the question is how far the \emph{estimate} would move on another
+sample of customers, and on 821 sessions with an AUC near one half the second
+is several times the first. Judging a between-stage gap against seed
+dispersion is precisely the error the amendment log records under A20b, so the
+cohort comparison is made against stratified bootstrap intervals over the
+cohort (2{,}000 resamples, shared across stages so that paired differences are
+computed on the same resampled customers).
+
 \begin{table}[t]
 \centering
 \caption{Fixed-cohort evaluation. All three stage models are scored on the
 same 821 test sessions --- those that reach every stage --- so the labels and
-the prevalence ($\pi = 0.4629$) are identical across rows and lift is
-comparable between them. LightGBM, five seeds; $\pm$ is the standard
-deviation over seeds. Compare with Table~\ref{tab:stage-models}, where each
-row is a different population.}
+the prevalence ($\pi = 0.4629$) are identical across rows. LightGBM, five
+seeds; $\pm$ is the seed standard deviation, and brackets are 95\% stratified
+bootstrap intervals over the cohort. The bootstrap is the yardstick for
+comparison; the seed dispersion is reported only to show that it is the
+smaller of the two sources of variation. Compare with
+Table~\ref{tab:stage-models}, where each row is a different population.}
 \label{tab:cohort}
 \small
-\begin{tabular}{@{}lccc@{}}
+\begin{tabular}{@{}lcc@{}}
 \toprule
-\textbf{Stage} & \textbf{PR-AUC} & \textbf{PR Lift} & \textbf{ROC-AUC} \\
+\textbf{Stage} & \textbf{PR Lift} & \textbf{ROC-AUC} \\
 \midrule
-S1 & $0.4846 \pm 0.0025$ & $1.047 \pm 0.005$ & $0.5155 \pm 0.0035$ \\
-S2 & $0.4776 \pm 0.0055$ & $1.032 \pm 0.012$ & $0.5172 \pm 0.0067$ \\
-S3 & $0.4935 \pm 0.0036$ & $1.066 \pm 0.008$ & $0.5468 \pm 0.0029$ \\
+S1 & $1.047 \pm 0.005$ \; [0.987, 1.143] & $0.516 \pm 0.004$ \; [0.476, 0.557] \\
+S2 & $1.032 \pm 0.012$ \; [0.970, 1.122] & $0.517 \pm 0.007$ \; [0.478, 0.559] \\
+S3 & $1.066 \pm 0.008$ \; [1.010, 1.168] & $0.547 \pm 0.003$ \; [0.510, 0.590] \\
+\midrule
+\multicolumn{3}{@{}l@{}}{\emph{Paired differences, 95\% bootstrap intervals}} \\
+S2 $-$ S1 & $-0.018$ \; [$-0.109$, $+0.073$] & $+0.003$ \; [$-0.038$, $+0.043$] \\
+S3 $-$ S1 & $+0.023$ \; [$-0.080$, $+0.129$] & $+0.034$ \; [$-0.018$, $+0.084$] \\
+S3 $-$ S2 & $+0.042$ \; [$-0.063$, $+0.150$] & $+0.031$ \; [$-0.019$, $+0.084$] \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-The monotone decline does not survive. On the conditional populations lift
-runs $1.79 \to 1.41 \to 1.09$; on the fixed cohort it runs
-$1.047 \to 1.032 \to 1.066$, a range of 0.034 against seed standard
-deviations of 0.005--0.012. The ordering is no longer monotone and the intent
-stage is nominally highest rather than lowest. ROC-AUC behaves the same way:
-it fell from 0.641 to 0.570 across populations, and within the fixed cohort
-it rises slightly, from 0.516 to 0.547, S3's advantage over both earlier
-stages being about four times the largest seed standard deviation. The
-direction of the reversal is what the
-information account predicts --- a longer prefix should help a little --- and
-the magnitude is what makes the finding sober rather than encouraging: on a
-population this homogeneous, none of the three models separates buyers from
-non-buyers to any useful degree.
+The monotone decline does not survive, and neither does anything that would
+replace it. On the conditional populations lift runs
+$1.79 \to 1.41 \to 1.09$; on the fixed cohort it runs
+$1.047 \to 1.032 \to 1.066$, and \emph{every pairwise interval contains
+zero} on both metrics. The three stages are not distinguishable from one
+another. They are barely distinguishable from chance: the S1 and S2 intervals
+include the no-skill values of 1 and 0.5, and only S3 excludes them, marginally
+(lift [1.010, 1.168], ROC-AUC [0.510, 0.590]). The correct summary is that on
+a population this homogeneous none of the three models separates buyers from
+non-buyers to a useful degree, and the apparent late-stage advantage in the
+point estimates is not supported.
+
+That is the finding the section needs. The claim doing work is that the
+decline \emph{vanishes}, not that it reverses --- a reversal would require
+evidence these data do not contain, and an earlier draft of this section
+asserted one by comparing means to seed standard deviations.
 
 Two consequences follow, and they pull in opposite directions. The first is
 that the headline decline of Section~\ref{sec:results-performance} is
@@ -1176,6 +1225,31 @@ overreaching. The second consequence is that H1's rejection stands. H1
 predicted that prevalence-normalised skill would improve along the funnel in
 operation, and it does not; the fixed-cohort result identifies the mechanism
 rather than reversing the verdict.
+
+\paragraph{Two bounds on this test.} The first is distributional. The S1 and
+S2 models are trained where prevalence is 0.073 and 0.059 and scored where it
+is 0.463, which is a prior-probability shift of the kind
+Section~\ref{sec:results-sensitivity} shows this setting to be sensitive to.
+Their calibration on the cohort is therefore meaningless, and only the
+ranking metrics reported above survive, since those are invariant to any
+monotone recalibration. Refitting each stage on cohort members alone removes
+the shift at the cost of a much smaller training set, and it changes nothing:
+lift runs $1.002 \to 1.012 \to 1.047$, every pairwise interval again contains
+zero (S3 $-$ S1 lift $+0.053$, [$-0.023$, $+0.138$]; ROC-AUC $+0.024$,
+[$-0.027$, $+0.075$]), S1 and S2 again include the no-skill value and S3 again
+excludes it marginally. The conclusion is not an artefact of applying a model
+outside the prevalence it was trained under.
+
+The second bound is power. 821 sessions is what the intersection of three
+stage populations with a held-out month leaves, and the intervals are
+correspondingly wide. They are wide enough to establish that the decline is
+absent and too wide to establish a small effect in either direction, which is
+stated rather than glossed. A third, minor point belongs with them: the
+percentile intervals for the \emph{levels} are centred slightly above their
+point estimates, because average precision is upward-biased when a small
+sample is resampled with replacement. The paired differences, where the bias
+enters both terms and largely cancels, are unaffected, and it is the
+differences that carry the argument.
 
 \subsection{Feature-family ablation (H3)}
 \label{sec:results-ablation}
@@ -1503,27 +1577,30 @@ The GRU is competitive with the tree models---test PR-AUC 0.124 against
 0.131 at S1 and 0.565 against 0.568 at S3---so disagreement below is not
 attributable to one incompetent arm.
 
-At the level of \emph{aggregate rankings}, Spearman correlations between
-TimeSHAP and TreeSHAP are $+0.200$ (S1), $+0.500$ (S2) and $+0.600$ (S3)
-against a pre-specified threshold of 0.6. \textbf{H4 is not supported},
-though the test is severely underpowered: the paradigms share only four or
-five mappable concepts, and with four items Spearman takes only a handful of
-discrete values. The pre-registration did not anticipate how few concepts
-the schemas would share, and the rising trend is therefore read
-descriptively.
+The pre-specified test was an aggregate one: Spearman correlation between the
+two paradigms' concept rankings, against a threshold of 0.6. It cannot be
+interpreted, and we report that rather than the number. The schemas share only
+four or five mappable concepts, and Spearman on four items takes a handful of
+discrete values, so the statistic has almost no resolution and no useful null.
+The pre-registration did not anticipate how few concepts the schemas would
+share. The aggregate values are given in Table~\ref{tab:h4} for completeness
+and carry no weight here.
 
-Per-instance agreement was therefore also computed: for each shared
-concept, tree and sequence attributions were correlated across 350+ shared
-sessions, over five seeds (Table~\ref{tab:h4}).
+\textbf{H4 is therefore assessed on the per-instance analysis}, which is
+well-powered: for each shared concept, tree and sequence attributions are
+correlated across 350+ shared sessions, over five seeds.
 
 \begin{table}[t]
 \centering
-\caption{Cross-paradigm agreement: aggregate versus per-instance.}
+\caption{Cross-paradigm agreement. The aggregate column is the pre-specified
+statistic and is reported for completeness only: computed over four or five
+shared concepts, it has too little resolution to interpret. The verdict rests
+on the per-instance columns.}
 \label{tab:h4}
 \small
 \begin{tabular}{@{}lS[table-format=+1.3]S[table-format=+1.3]c@{}}
 \toprule
-\textbf{Stage} & {\textbf{Aggregate $\rho$}} &
+\textbf{Stage} & {\textbf{Aggregate $\rho$ (uninterpretable)}} &
 {\textbf{Per-instance mean $\rho$}} & \textbf{Sign-stable concepts} \\
 \midrule
 S1 & +0.200 & +0.179 & 1 of 4 \\
@@ -1535,9 +1612,10 @@ S3 & +0.600 & +0.046 & 2 of 5 \\
 
 Per-instance agreement is indistinguishable from zero at every stage, and
 only 3 of 14 (stage, concept) pairs hold a consistent sign across seeds.
-\textbf{Aggregate convergent validity does not imply agreement about
-individual cases}: the same models produce aggregate correlations up to
-$+0.600$ and per-instance agreement of approximately zero. The comparison
+\textbf{The two paradigms do not agree about individual customers}, and this
+is the finding that bears on practice: a system surfacing per-customer
+explanations is making a claim the evidence does not support, even where the
+same models rank concepts similarly in aggregate. The comparison
 conflates differences in architecture, input representation and explanation
 algorithm, and the observed disagreement is accordingly an upper bound on
 conceptual divergence rather than a pure measure of it; quantifying the
@@ -1662,12 +1740,13 @@ a lever.}
 \subsection{Why prediction alone is not decision support here}
 \label{sec:why-not-prediction}
 
-The clearest evidence that ranking quality and decision value diverge comes
-from the operating points themselves. Table~\ref{tab:error} reports the
-confusion structure at each stage's validation-selected threshold, against the
-one comparator that matters operationally: the trivial rule that flags every
-session. That rule costs nothing to build, so a model earns its place only by
-beating it. Its $F_1$ is $2\pi_s/(1+\pi_s)$ at prevalence $\pi_s$.
+A model earns its place in an operational system by beating the one comparator
+available to every organisation for free: the trivial rule that flags every
+session, whose $F_1$ is $2\pi_s/(1+\pi_s)$ at prevalence $\pi_s$. Judged that
+way, the stages diverge sharply --- and the divergence turns out to be
+governed by the threshold rule rather than by the models, which is the point
+of this subsection. Table~\ref{tab:error} reports the confusion structure at
+each stage's validation-selected operating point.
 
 \begin{table}[htbp]
 \centering
@@ -1692,32 +1771,23 @@ S3 & 2973  & 0.5214 & 0.990 & 1542 & 1402 & 0.524 & 0.995 & 0.6862 & 0.6854 & +0
 \end{tabular}
 \end{table}
 
-The S3 row is arresting. At its own $F_1$-selected operating point the
-intent-stage model refers 99.0\% of sessions for intervention and achieves an
-$F_1$ of 0.6862 against 0.6854 for a rule that refers everyone: a margin of
-0.0008. The early stages behave differently. S1 refers 17.4\% of sessions and
-beats the trivial rule by 0.0647 $F_1$ points; S2 refers 24.3\% and beats it
-by 0.0359. These are modest margins, and the cost side is real --- roughly six
-false positives per true positive at S1 and ten at S2 --- but they are
-\emph{selective}, which is the property a targeting system needs.
+At its own operating point the intent-stage model refers 99.0\% of sessions
+and beats the blanket rule by 0.0008 $F_1$; the earlier stages refer 17.4\%
+and 24.3\% and beat it by 0.0647 and 0.0359, at roughly six and ten false
+positives per true positive. Read at face value this says late-stage targeting
+is worthless, and that reading is an artefact of how the threshold was chosen.
+$F_1$ maximisation is prevalence-sensitive: as $\pi_s$ approaches one half the
+criterion is increasingly satisfied by flagging everything, and
+$\pi_{S3} = 0.521$. A rule that flags 99\% of sessions cannot beat a rule that
+flags 100\% by much, whatever model sits behind it.
 
-The reading this invites is that the cart-stage model is operationally
-indistinguishable from a blanket policy, and that reading does not survive
-scrutiny. $F_1$ maximisation is prevalence-sensitive: as $\pi_s$ rises toward
-one half, the criterion is increasingly satisfied by flagging everything, and
-$\pi_{S3} = 0.521$. The 99\% flag rate is therefore at least partly a property
-of the threshold rule rather than of the model, and a conclusion about
-whether late-stage targeting is worth doing cannot rest on a single
-$F_1$-selected point. Section~\ref{sec:decision-economics} tests the claim
-across the operating range instead.
-
-What survives the operating point is the narrower observation that decision
-value and ranking quality are not the same quantity. Any of PR-AUC, $F_1$ or
-accuracy read in isolation would have ranked S3 the strongest stage; the
-comparison against a decision-relevant null shows that at the threshold a
-standard selection rule chooses, it contributes almost nothing over flagging
-everyone. That is a reason to select thresholds by decision criteria rather
-than by $F_1$, which is the point of a decision-support framing.
+The durable observation is narrower and more useful: decision value and
+ranking quality are not the same quantity, and neither is a property of the
+model alone. Any of PR-AUC, $F_1$ or accuracy read in isolation would have
+ranked S3 the strongest stage; measured against a decision-relevant null at a
+threshold a standard rule selected, it looks worthless. Both readings are
+incomplete, because the operating point is a free variable that neither
+reports. Section~\ref{sec:decision-economics} makes it explicit and sweeps it.
 
 \subsection{From explanation to intervention}
 \label{sec:explanation-to-intervention}
@@ -1783,7 +1853,7 @@ Engagement (33.8\%), price returns (37.9\%) &
 Attribution is stable but predictive skill is near its floor
 (lift 1.09, ROC-AUC 0.570) &
 Ranking skill is lowest here, yet at budgets of 5\% or more this stage
-returns the most conversions per contact (Table~ef{tab:sweep}) &
+returns the most conversions per contact (Table~\ref{tab:sweep}) &
 Cart-recovery and price-return prompts, applied under an explicit budget
 rather than at an $F_1$-selected threshold &
 Selecting the threshold by $F_1$ flags 99\% of sessions and adds nothing
@@ -2496,7 +2566,7 @@ Deviation (A28, A29) \\
 H1--H4 (\S2) & \S\ref{sec:results} &
 All four tested and reported as found & Unchanged \\
 \midrule
-Whole-session comparator & \S\ref{sec:results-migration} &
+Whole-session comparator & \S\ref{sec:results-rq4} &
 Fitted LightGBM on unconstrained sessions & \textbf{Exploratory} (A33):
 replaced an arithmetic stage-average that was true by construction \\
 \addlinespace
@@ -2572,177 +2642,26 @@ that the seeded pipeline is deterministic.
 %==============================================================================
 \section{Supporting figures}
 \label{app:figures}
-%==============================================================================
 
-This appendix collects the schematics and diagnostic exhibits that support,
-but are not required by, the argument in the body. Two conventions apply
-throughout and are repeated in each caption so the figures remain
-self-contained if reproduced separately.
+Twelve supporting exhibits accompany this manuscript as supplementary
+material: four schematics of the study workflow, the training pipeline, the
+explanation pipeline and the sequence-model architecture, and eight per-stage
+diagnostics (ROC and precision--recall curves, confusion matrices, a baseline
+comparison, SHAP summary and dependence plots, grouped feature importance, and
+the ablation ladder). They support but are not required by the argument in the
+body, and no claim in the body rests on one.
 
-First, \emph{seed provenance}. Curve and instance-level diagnostics
-(Figures~\ref{fig:a-roc}--\ref{fig:a-dependence}) are drawn from a single
-fitted model at seed 42, the protocol's configuration-template default. This
-is deliberate: an ROC curve or a beeswarm pooled over five seeds is not a
-well-defined object, and averaging them would misrepresent both the shape and
-the spread. Every headline \emph{number} in the body remains a five-seed mean
-with the standard deviation reported beside it. Figures that do aggregate over
-seeds (Figures~\ref{fig:a-importance} and~\ref{fig:a-ablation}) say so.
+Two conventions apply throughout and are repeated in each caption there so the
+figures remain self-contained. First, \emph{seed provenance}: curve and
+instance-level diagnostics are drawn from a single fitted model at seed 42, the
+protocol's configuration-template default, because an ROC curve or a beeswarm
+pooled over five seeds is not a well-defined object. Every headline number in
+the body remains a five-seed mean with its standard deviation. Second,
+\emph{comparability}: per-stage panels use independent axes, because chance
+level equals the prevalence and prevalence varies roughly six-fold across the
+conditional stage populations, so a shared axis would compare skill against
+different baselines.
 
-Second, \emph{comparability}. Precision-recall curves, confusion matrices and
-ablation panels are drawn per stage rather than pooled, because chance level
-equals the prevalence and prevalence varies roughly six-fold across the
-conditional stage populations. A shared axis would compare skill against
-different baselines and invite exactly the misreading that
-Section~\ref{sec:results-performance} exists to prevent.
-
-\subsection{Study and pipeline schematics}
-
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=\linewidth]{figA9_research_workflow.pdf}
-\caption{Research workflow, from protocol freeze to reporting. The test
-partition is opened exactly once, at stage-model evaluation; every deviation
-after freeze is recorded in the amendment log
-(Appendix~\ref{app:amendments}) with its date and rationale.}
-\label{fig:a-workflow}
-\end{figure}
-
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=\linewidth]{figA10_training_pipeline.pdf}
-\caption{Per-stage training pipeline. Note where calibration is fitted: on a
-held-out 20\% slice of the \emph{training} period, not on validation. Under
-the prior shift present in these data the textbook choice inflates expected
-calibration error by roughly an order of magnitude
-(Figure~\ref{fig:reliability}). The test partition enters only at the final
-evaluation step, and the whole pipeline repeats over the five frozen seeds.}
-\label{fig:a-training}
-\end{figure}
-
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=\linewidth]{figA11_shap_workflow.pdf}
-\caption{SHAP computation and validation workflow. Attributions are computed
-against a background drawn from training rows only and on the validation
-partition; correlated features are then grouped using a clustering fixed at
-the earliest, coarsest stage. No trajectory is interpreted before all four
-validation arms have run.}
-\label{fig:a-shapflow}
-\end{figure}
-
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=\linewidth]{figA12_model_architecture.pdf}
-\caption{Model architecture. Both arms consume the identical stage prefix, so
-any disagreement between their attributions
-(Section~\ref{sec:results-h4}) is representational rather than a difference in
-what each model was permitted to observe.}
-\label{fig:a-architecture}
-\end{figure}
-
-\subsection{Predictive diagnostics}
-
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=0.72\linewidth]{figA1_roc_curves.pdf}
-\caption{Receiver operating characteristic by funnel stage, test partition,
-seed 42. ROC is prevalence-free, so unlike the precision-recall curves these
-three are directly comparable to one another; the ordering
-$S1 > S2 > S3$ is the same decline reported in
-Table~\ref{tab:stage-models}.}
-\label{fig:a-roc}
-\end{figure}
-
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=0.72\linewidth]{figA2_pr_curves.pdf}
-\caption{Precision-recall by funnel stage, test partition, seed 42. The dotted
-horizontal beneath each curve is that stage's prevalence, which is its chance
-level. Read without those baselines the panel inverts the finding: S3's curve
-sits highest while lying closest to its own floor.}
-\label{fig:a-pr}
-\end{figure}
-
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=\linewidth]{figA3_confusion_matrices.pdf}
-\caption{Confusion matrices at each stage's validation-selected F1 threshold,
-seed 42. Cells give row-normalised proportions with raw counts beneath:
-proportions alone would hide how thin the S3 test partition is
-($N = 2{,}973$), and counts alone are not comparable across stages of
-differing size and prevalence. The S3 panel is not an error and repays
-attention. With prevalence at 0.521 and almost no discriminative signal left
-(ROC-AUC 0.570), F1 maximisation on validation degenerates toward predicting
-the positive class for nearly every session: 99\% of both true classes are
-assigned to ``purchase''. This is the operational face of the headline
-result. A stage model can look strong on raw PR-AUC (0.568) while, at its own
-selected operating point, carrying almost no decision content --- which is
-precisely why Section~\ref{sec:results-performance} reports lift and ROC-AUC
-rather than PR-AUC alone, and why intervention at the cart stage cannot be
-justified by predicted propensity.}
-\label{fig:a-confusion}
-\end{figure}
-
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=\linewidth]{figA7_performance_comparison.pdf}
-\caption{Dataset A model-family comparison on the month-ordered split, five
-seeds, showing the primary metric (PR-AUC, with seed standard deviation) and
-the secondary metric (ROC-AUC). This comparison is what carried LightGBM into
-the stage models: CatBoost leads on PR-AUC but LightGBM is within
-overlapping seed variation and admits exact TreeSHAP.}
-\label{fig:a-baselines}
-\end{figure}
-
-\subsection{Attribution diagnostics}
-
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=\linewidth]{figA4_shap_summary.pdf}
-\caption{SHAP summary by stage, seed 42, ungrouped. Each point is one
-explained session; horizontal position is its SHAP value and colour is the
-rank-normalised feature value, so direction of effect is readable. Feature
-values are rank-normalised because the raw scales differ by orders of
-magnitude and a shared colour axis would otherwise saturate on the largest
-feature. The body's Figure~\ref{fig:migration} deliberately sums correlated
-features and therefore cannot show this.}
-\label{fig:a-summary}
-\end{figure}
-
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=\linewidth]{figA5_shap_dependence.pdf}
-\caption{SHAP dependence for the three strongest features at each stage, seed
-42; one row per stage. Where a feature appears in more than one row, the
-comparison shows the migration story at the level of an individual variable
-rather than a family.}
-\label{fig:a-dependence}
-\end{figure}
-
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=\linewidth]{figA6_feature_importance.pdf}
-\caption{Ungrouped mean $|$SHAP$|$ per feature and stage, seed 42. This is the
-raw view behind the grouped shares of Figure~\ref{fig:migration}. The
-difference between the two is itself informative: at S1 a two-event prefix
-renders several engagement and temporal features numerically identical, so
-their individual attributions there are arbitrary partitions of one quantity
---- which is precisely why the body reports groups.}
-\label{fig:a-importance}
-\end{figure}
-
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=\linewidth]{figA8_ablation.pdf}
-\caption{Feature-family ablation by stage, mean $\pm$ standard deviation over
-five seeds. Panels use independent horizontal scales because absolute PR-AUC
-is not comparable across stages; the quantity of interest within each panel is
-the spacing between rungs, not the position of the bars. The corresponding
-paired bootstrap intervals are in Table~\ref{tab:ablation}.}
-\label{fig:a-ablation}
-\end{figure}
-
-%==============================================================================
 \section{Supporting tables}
 \label{app:tables}
 %==============================================================================
@@ -2794,27 +2713,15 @@ S3 & LightGBM & 100 & 100 & 0.5158 \\
 
 \subsection{Computational cost}
 
-\begin{table}[htbp]
-\centering
-\caption{Measured wall-clock cost of the appendix generation run, the one step
-instrumented for timing. Steps that were never instrumented are reported as
-unmeasured rather than estimated: a plausible-looking runtime that was never
-observed is worse than an absent one, because a reader may plan against it.
-Hardware and library versions accompany the manuscript as
-\texttt{appendix\_environment.csv}. Tree models are CPU-only; the sequence arm
-is the sole component that benefits from a GPU.}
-\label{tab:a-cost}
-\small
-\begin{tabular}{@{}llr@{}}
-\toprule
-\textbf{Step} & \textbf{Status} & \textbf{Wall clock (s)} \\
-\midrule
-Stage-model fit (1 seed, diagnostics) & measured & see \texttt{runtime\_appendix.csv} \\
-Stage TreeSHAP (3 stages) & measured & see \texttt{runtime\_appendix.csv} \\
-All other pipeline steps & not measured & --- \\
-\bottomrule
-\end{tabular}
-\end{table}
+One step of the pipeline was instrumented for timing: the diagnostic
+generation run, which fitted the three stage models at one seed in
+\SI{332}{\second} and computed TreeSHAP across all three in
+\SI{761}{\second} on the CPU-only configuration recorded in
+\texttt{appendix\_environment.csv}. The framework is therefore inexpensive
+relative to the data preparation that precedes it. No other step was
+instrumented, and none is estimated here: a plausible-looking runtime that was
+never observed is worse than an absent one, because a reader may plan against
+it. The sequence arm is the sole component that benefits from a GPU.
 
 \subsection{Literature comparison}
 

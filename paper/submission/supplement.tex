@@ -1,0 +1,202 @@
+% Supplementary figures for "Funnel-Stage SHAP".
+% Compiled separately; shares figures/ and references.bib with main.tex.
+\documentclass[a4paper,fleqn]{cas-sc}
+\usepackage[authoryear,longnamesfirst]{natbib}
+\usepackage[T1]{fontenc}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\graphicspath{{figures/}}
+
+\begin{document}
+\shorttitle{Funnel-Stage SHAP: supplementary figures}
+\shortauthors{A. Agnaou and S. Ailli}
+\title[mode=title]{Supplementary figures for ``Funnel-Stage SHAP: a design
+science framework for stage-conditioned explainable purchase prediction in
+e-commerce''}
+
+\author[1]{Ayoub Agnaou}
+\ead{ay.agnaou@edu.umi.ac.ma}
+\author[1]{S. Ailli}
+\affiliation[1]{organization={Faculty of Sciences, Moulay Isma\"il University},
+                city={Meknes}, country={Morocco}}
+
+\maketitle
+\renewcommand{\thefigure}{S\arabic{figure}}
+\setcounter{figure}{0}
+
+\section*{Supporting figures}
+%==============================================================================
+
+This appendix collects the schematics and diagnostic exhibits that support,
+but are not required by, the argument in the body. Two conventions apply
+throughout and are repeated in each caption so the figures remain
+self-contained if reproduced separately.
+
+First, \emph{seed provenance}. Curve and instance-level diagnostics
+(Figures~\ref{fig:a-roc}--\ref{fig:a-dependence}) are drawn from a single
+fitted model at seed 42, the protocol's configuration-template default. This
+is deliberate: an ROC curve or a beeswarm pooled over five seeds is not a
+well-defined object, and averaging them would misrepresent both the shape and
+the spread. Every headline \emph{number} in the body remains a five-seed mean
+with the standard deviation reported beside it. Figures that do aggregate over
+seeds (Figures~\ref{fig:a-importance} and~\ref{fig:a-ablation}) say so.
+
+Second, \emph{comparability}. Precision-recall curves, confusion matrices and
+ablation panels are drawn per stage rather than pooled, because chance level
+equals the prevalence and prevalence varies roughly six-fold across the
+conditional stage populations. A shared axis would compare skill against
+different baselines and invite exactly the misreading that
+the predictive-performance section of the article exists to prevent.
+
+\subsection{Study and pipeline schematics}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{figA9_research_workflow.pdf}
+\caption{Research workflow, from protocol freeze to reporting. The test
+partition is opened exactly once, at stage-model evaluation; every deviation
+after freeze is recorded in the amendment log
+(the amendment log accompanying the article) with its date and rationale.}
+\label{fig:a-workflow}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{figA10_training_pipeline.pdf}
+\caption{Per-stage training pipeline. Note where calibration is fitted: on a
+held-out 20\% slice of the \emph{training} period, not on validation. Under
+the prior shift present in these data the textbook choice inflates expected
+calibration error by roughly an order of magnitude
+(the reliability figure in the article). The test partition enters only at the final
+evaluation step, and the whole pipeline repeats over the five frozen seeds.}
+\label{fig:a-training}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{figA11_shap_workflow.pdf}
+\caption{SHAP computation and validation workflow. Attributions are computed
+against a background drawn from training rows only and on the validation
+partition; correlated features are then grouped using a clustering fixed at
+the earliest, coarsest stage. No trajectory is interpreted before all four
+validation arms have run.}
+\label{fig:a-shapflow}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{figA12_model_architecture.pdf}
+\caption{Model architecture. Both arms consume the identical stage prefix, so
+any disagreement between their attributions
+(the cross-paradigm section of the article) is representational rather than a difference in
+what each model was permitted to observe.}
+\label{fig:a-architecture}
+\end{figure}
+
+\subsection{Predictive diagnostics}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.72\linewidth]{figA1_roc_curves.pdf}
+\caption{Receiver operating characteristic by funnel stage, test partition,
+seed 42. ROC is prevalence-free, so unlike the precision-recall curves these
+three are directly comparable to one another; the ordering
+$S1 > S2 > S3$ is the same decline reported in
+the stage-model table of the article.}
+\label{fig:a-roc}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.72\linewidth]{figA2_pr_curves.pdf}
+\caption{Precision-recall by funnel stage, test partition, seed 42. The dotted
+horizontal beneath each curve is that stage's prevalence, which is its chance
+level. Read without those baselines the panel inverts the finding: S3's curve
+sits highest while lying closest to its own floor.}
+\label{fig:a-pr}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{figA3_confusion_matrices.pdf}
+\caption{Confusion matrices at each stage's validation-selected F1 threshold,
+seed 42. Cells give row-normalised proportions with raw counts beneath:
+proportions alone would hide how thin the S3 test partition is
+($N = 2{,}973$), and counts alone are not comparable across stages of
+differing size and prevalence. The S3 panel is not an error and repays
+attention. With prevalence at 0.521 and almost no discriminative signal left
+(ROC-AUC 0.570), F1 maximisation on validation degenerates toward predicting
+the positive class for nearly every session: 99\% of both true classes are
+assigned to ``purchase''. This is the operational face of the headline
+result. A stage model can look strong on raw PR-AUC (0.568) while, at its own
+selected operating point, carrying almost no decision content --- which is
+precisely why the predictive-performance section of the article reports lift and ROC-AUC
+rather than PR-AUC alone, and why intervention at the cart stage cannot be
+justified by predicted propensity.}
+\label{fig:a-confusion}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{figA7_performance_comparison.pdf}
+\caption{Dataset A model-family comparison on the month-ordered split, five
+seeds, showing the primary metric (PR-AUC, with seed standard deviation) and
+the secondary metric (ROC-AUC). This comparison is what carried LightGBM into
+the stage models: CatBoost leads on PR-AUC but LightGBM is within
+overlapping seed variation and admits exact TreeSHAP.}
+\label{fig:a-baselines}
+\end{figure}
+
+\subsection{Attribution diagnostics}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{figA4_shap_summary.pdf}
+\caption{SHAP summary by stage, seed 42, ungrouped. Each point is one
+explained session; horizontal position is its SHAP value and colour is the
+rank-normalised feature value, so direction of effect is readable. Feature
+values are rank-normalised because the raw scales differ by orders of
+magnitude and a shared colour axis would otherwise saturate on the largest
+feature. The article's attribution-migration figure deliberately sums correlated
+features and therefore cannot show this.}
+\label{fig:a-summary}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{figA5_shap_dependence.pdf}
+\caption{SHAP dependence for the three strongest features at each stage, seed
+42; one row per stage. Where a feature appears in more than one row, the
+comparison shows the migration story at the level of an individual variable
+rather than a family.}
+\label{fig:a-dependence}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{figA6_feature_importance.pdf}
+\caption{Ungrouped mean $|$SHAP$|$ per feature and stage, seed 42. This is the
+raw view behind the grouped shares of the attribution-migration figure of the article. The
+difference between the two is itself informative: at S1 a two-event prefix
+renders several engagement and temporal features numerically identical, so
+their individual attributions there are arbitrary partitions of one quantity
+--- which is precisely why the body reports groups.}
+\label{fig:a-importance}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{figA8_ablation.pdf}
+\caption{Feature-family ablation by stage, mean $\pm$ standard deviation over
+five seeds. Panels use independent horizontal scales because absolute PR-AUC
+is not comparable across stages; the quantity of interest within each panel is
+the spacing between rungs, not the position of the bars. The corresponding
+paired bootstrap intervals are in the ablation table of the article.}
+\label{fig:a-ablation}
+\end{figure}
+
+
+\bibliographystyle{cas-model2-names}
+\bibliography{references}
+\end{document}
