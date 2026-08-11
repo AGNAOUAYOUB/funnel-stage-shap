@@ -1,0 +1,35 @@
+cff-version: 1.2.0
+title: >-
+  Funnel-Stage SHAP: a design science framework for stage-conditioned
+  explainable purchase prediction in e-commerce
+message: >-
+  If you use this software or its results, please cite the accompanying
+  manuscript. The DOI below is a placeholder until the repository is deposited.
+type: software
+authors:
+  - given-names: Ayoub
+    family-names: Agnaou
+    email: ay.agnaou@edu.umi.ac.ma
+    affiliation: Faculty of Sciences, Moulay Ismail University
+    # orcid: https://orcid.org/[DATA REQUIRED]
+  - family-names: Ailli
+    given-names: S.
+    affiliation: Faculty of Sciences, Moulay Ismail University
+    # orcid: https://orcid.org/[DATA REQUIRED]
+repository-code: '[DATA REQUIRED: repository URL]'
+abstract: >-
+  Prediction and explanation are held to the same temporal constraint: at each
+  funnel stage a model is fitted on the event prefix observable at that stage's
+  cut-point, Shapley attributions are computed from exactly that prefix, and a
+  validation layer tests their faithfulness, stability and reproducibility.
+keywords:
+  - explainable AI
+  - SHAP
+  - purchase prediction
+  - customer journey
+  - clickstream
+  - decision support
+  - design science
+license: '[DATA REQUIRED: licence not yet chosen]'
+version: 1.0.0
+date-released: '[DATA REQUIRED: on deposit]'

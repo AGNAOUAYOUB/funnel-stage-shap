@@ -119,8 +119,8 @@ that works during comparison may be useless at checkout. And it requires a
 beats acting on everyone, which is free. We show in
 Section~\ref{sec:decision-support} that this last requirement is not
 incidental --- at the cart stage, a model with an apparently strong PR-AUC of
-0.568 turns out to refer 99\% of sessions for intervention and to beat a
-blanket rule by 0.0008 $F_1$ points. Conventional predictive evaluation ranks
+0.568 turns out to refer 98\% of sessions for intervention and to beat a
+blanket rule by 0.001 $F_1$ points. Conventional predictive evaluation ranks
 that stage the strongest of the three; a decision-relevant evaluation ranks it
 the weakest. The gap between those two verdicts is the space this paper
 occupies.
@@ -208,10 +208,10 @@ document was version-frozen and is distributed with the manuscript, but it
 was not deposited in a time-stamping registry, so it should be weighted as an
 auditable record of intent rather than as third-party-certified priority.
 \emph{Second, the log is not a record of a study that went to plan.}
-Forty-seven amendments are registered. Eighteen precede any test-partition
-access and are implementation decisions; twenty-nine follow it. Five claims
-were retracted after later analysis contradicted them, and two hypothesis
-verdicts were reversed.
+Forty-eight amendments are registered. Eighteen precede any test-partition
+access and are implementation decisions; thirty follow it. Six claims were
+retracted after later analysis contradicted them, and two hypothesis verdicts
+were reversed.
 \emph{Third, not everything reported here was pre-specified.} Thirteen
 analyses were added after the freeze, are labelled exploratory at every point
 of use, and are listed in Appendix~\ref{app:alignment}. The register
@@ -1751,31 +1751,36 @@ each stage's validation-selected operating point.
 
 \begin{table}[htbp]
 \centering
-\caption{Error structure at the operating threshold (seed 42, test partition)
-against the always-positive rule. \emph{Flag rate} is the share of sessions
-referred for intervention; \emph{FP per TP} is the false positives incurred
-per true positive. $F_1$ margin is the model's $F_1$ minus that of the trivial
-rule at the same prevalence. Source:
-\texttt{appendix\_error\_analysis\_gap30s200000.csv}.}
+\caption{Error structure at the operating threshold, against the
+always-positive rule, over the five frozen seeds. Both the fit and the
+validation-selected threshold vary with the seed, so $\pm$ spans both sources;
+an earlier version of this table reported one seed while the rest of the paper
+reported five. \emph{Flag rate} is the share of sessions referred for
+intervention; \emph{FP per TP} is the false positives incurred per true
+positive. $F_1$ margin is the model's $F_1$ minus that of the trivial rule at
+the same prevalence. Source:
+\texttt{error\_structure\_gap30s200000.csv}.}
 \label{tab:error}
 \small
-\begin{tabular}{@{}lS[table-format=5.0]S[table-format=1.4]S[table-format=1.3]S[table-format=5.0]S[table-format=5.0]S[table-format=1.3]S[table-format=1.3]S[table-format=1.4]S[table-format=1.4]S[table-format=+1.4]S[table-format=2.2]@{}}
+\begin{tabular}{@{}lccccccc@{}}
 \toprule
-\textbf{Stage} & {$N$} & {$\pi_s$} & {\textbf{Flag rate}} & {\textbf{TP}} &
-{\textbf{FP}} & {\textbf{Prec.}} & {\textbf{Rec.}} & {$F_1$} &
-{$F_1$ trivial} & {$F_1$ margin} & {\textbf{FP per TP}} \\
+\textbf{Stage} & $N$ & $\pi_s$ & \textbf{Threshold} & \textbf{Flag rate} &
+\textbf{Precision} & $F_1$ \textbf{margin} & \textbf{FP per TP} \\
 \midrule
-S1 & 38059 & 0.0734 & 0.174 & 950  & 5693 & 0.143 & 0.340 & 0.2014 & 0.1367 & +0.0647 & 5.99 \\
-S2 & 17884 & 0.0589 & 0.243 & 398  & 3957 & 0.091 & 0.378 & 0.1472 & 0.1113 & +0.0359 & 9.94 \\
-S3 & 2973  & 0.5214 & 0.990 & 1542 & 1402 & 0.524 & 0.995 & 0.6862 & 0.6854 & +0.0008 & 0.91 \\
+S1 & 38{,}059 & 0.0734 & $0.115 \pm 0.008$ & $0.187 \pm 0.030$ & $0.139 \pm 0.007$ & $+0.0613 \pm 0.0020$ & $6.22 \pm 0.37$ \\
+S2 & 17{,}884 & 0.0589 & $0.086 \pm 0.009$ & $0.334 \pm 0.074$ & $0.087 \pm 0.004$ & $+0.0357 \pm 0.0005$ & $10.50 \pm 0.45$ \\
+S3 &  2{,}973 & 0.5214 & $0.434 \pm 0.017$ & $0.984 \pm 0.017$ & $0.525 \pm 0.004$ & $+0.0011 \pm 0.0009$ & $0.90 \pm 0.01$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-At its own operating point the intent-stage model refers 99.0\% of sessions
-and beats the blanket rule by 0.0008 $F_1$; the earlier stages refer 17.4\%
-and 24.3\% and beat it by 0.0647 and 0.0359, at roughly six and ten false
-positives per true positive. Read at face value this says late-stage targeting
+At its own operating point the intent-stage model refers 98.4\% of sessions
+and beats the blanket rule by 0.0011 $F_1$; the earlier stages refer 18.7\%
+and 33.4\% and beat it by 0.0613 and 0.0357, at roughly six and ten false
+positives per true positive. The threshold itself is seed-dependent, and at S2
+substantially so: the flag rate spans $0.334 \pm 0.074$ across seeds, so a
+single fitted model can put the operating point anywhere between roughly a
+quarter and two-fifths of sessions. Read at face value this says late-stage targeting
 is worthless, and that reading is an artefact of how the threshold was chosen.
 $F_1$ maximisation is prevalence-sensitive: as $\pi_s$ approaches one half the
 criterion is increasingly satisfied by flagging everything, and
@@ -1823,7 +1828,7 @@ S1 \newline exploration &
 Product views / revisits (19.2\%) &
 The only S1 family that clears the permutation null, and by the widest margin
 in the study ($z = +23.3$); the model is also selective here
-(flag rate 0.174, $F_1$ margin $+0.065$) &
+(flag rate 0.187, $F_1$ margin $+0.061$) &
 This is where targeting adds most per contact under a small budget
 (incremental precision 0.215 at a 1\% flag rate) &
 The attributed feature is \texttt{n\_unique\_products}, so the lever is the
@@ -2459,7 +2464,11 @@ decisions.
 % authors and this file is the anonymised manuscript.
 
 \section*{Data and code availability}
-Dataset~A is publicly available from the UCI Machine Learning Repository.
+Dataset~A is publicly available from the UCI Machine Learning Repository under
+CC BY 4.0. Its provenance is verified rather than asserted: the local file is
+byte-identical to the CSV served by the canonical archive endpoint
+(CSV SHA-256 \texttt{b3055ee3\ldots}; the archive itself hashes to
+\texttt{2972e618\ldots}, a distinct object).
 Dataset~B (REES46 multi-category store, October 2019) is publicly
 distributed; provenance hashes, the frozen splits, the seed list, all
 result tables and the full analysis code accompany this manuscript in an
@@ -2481,9 +2490,9 @@ redistributed with the repository.
 
 The study was conducted under a protocol version-frozen before the test
 partition was opened. Every deviation is recorded in a dated amendment log
-distributed with the manuscript, 45 entries at the time of submission,
+distributed with the manuscript, 48 entries at the time of submission,
 including three cut-point redefinitions made on the basis of measurement,
-one reversal of a reported hypothesis verdict, and five claims retracted
+one reversal of a reported hypothesis verdict, and six claims retracted
 after further analysis contradicted them. The protocol document, the
 amendment log, an element-by-element alignment matrix mapping each frozen
 protocol item to where the manuscript reports it, the variable dictionary,

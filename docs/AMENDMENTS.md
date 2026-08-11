@@ -1454,3 +1454,82 @@ The test is 20 rounds, so p = 0.048 is the smallest value it can express; it est
 which families clear a null and cannot resolve finer differences. Implemented in
 `explain/permutation_null.py`, CLI `permutation-null`, with a DVC stage.
 
+
+## 2026-08-11 â€” Pre-submission audit
+
+### A47. Dataset A provenance closed; Table 12 moved to five seeds; environment frozen (Sec. 5.2, 6.2, 15)
+
+**Date:** 2026-08-11. **Status:** closes A5 and A35; corrects A38/A39's Table 12.
+
+**Dataset A provenance: VERIFIED.** A35 recorded that the provenance wording claimed the
+canonical archive's SHA-256 matched the dataset, which is impossible, and left A5's action
+item open. The check has now been performed as A35 specified. The canonical UCI archive was
+downloaded, its single member extracted, and that member's digest compared with the local
+file's:
+
+| Object | Bytes | SHA-256 |
+|---|---|---|
+| Archive (`.../static/public/468/...dataset.zip`) | 1,072,219 | `2972e6184d3ad7beaaa831d9fc2b059dc3ee29df69d1ec593c466a5cd8485d14` |
+| CSV inside the archive | 1,072,063 | `b3055ee355f59134d851d32641183cb4a8b45def7124d2f50442a042f358e0d9` |
+| Local CSV | 1,072,063 | `b3055ee355f59134d851d32641183cb4a8b45def7124d2f50442a042f358e0d9` |
+
+The local file is byte-identical to the CSV the canonical endpoint serves. A5 and A35 are
+closed.
+
+**A defect A35 did not catch.** A35 corrected `DATASETS.md` but not `provenance_A.json`,
+which still carried `"status": "VERIFIED: Canonical UCI endpoint archive zip SHA-256 matches
+dataset ... exactly."` â€” the same impossible claim, in the machine-readable record a
+reproducer would trust over the prose. Both files now report the archive digest and the CSV
+digest as separate fields.
+
+**Table 12 (error structure) moved from one seed to five.** A40 corrected the
+decision-economics table from a single-seed reading to five seeds but left the error-structure
+table at seed 42, so the paper reported one seed inside a section whose every other number
+was a five-seed mean. Recomputed with `models/error_structure.py`, each seed evaluated at its
+own validation-selected threshold, since the threshold varies with the seed as well as the
+fit:
+
+| Stage | Flag rate | Precision | F1 margin | FP per TP |
+|---|---|---|---|---|
+| S1 | 0.187 +/- 0.030 | 0.139 +/- 0.007 | +0.0613 +/- 0.0020 | 6.22 +/- 0.37 |
+| S2 | 0.334 +/- 0.074 | 0.087 +/- 0.004 | +0.0357 +/- 0.0005 | 10.50 +/- 0.45 |
+| S3 | 0.984 +/- 0.017 | 0.525 +/- 0.004 | +0.0011 +/- 0.0009 | 0.90 +/- 0.01 |
+
+No conclusion changes, but one number moves materially: S2's flag rate was 0.243 at seed 42
+against a five-seed mean of 0.334 +/- 0.074, so the single seed sat near the bottom of the
+range. The threshold's own dispersion is now reported, because a reader budgeting against a
+flag rate should know it is not a property of the model alone.
+
+**Environment frozen.** `requirements-lock.txt` pins 291 packages resolved from
+`pyproject.toml` including the optional sequence and XAI-evaluation extras, so the torch and
+timeshap versions the H4 arm depends on are captured rather than left to resolution. Python
+3.11.15. `CITATION.cff` added.
+
+**Chronology and numbering repaired.** The log header claimed the protocol was "not yet
+frozen" and that "the test partition has never been read" â€” written at A1 and false since
+A19, which reports results on 38,059 test sessions. A section was headed "Alignment with the
+registered protocol v1.0" while the manuscript states the protocol was never deposited in a
+registry. Both corrected. A second entry numbered A30 renumbered to A46; nothing referenced
+it, whereas every code and manuscript reference to A30 resolves to the GRU entry.
+`docs/AMENDMENT_REGISTER.md` is now generated from this log by
+`scripts/build_amendment_register.py`, which fails if the two disagree.
+
+**A retracted claim found still live.** The Discussion still described the fixed cohort as
+"flat to within roughly three seed standard deviations" with "ROC-AUC rises slightly" â€” both
+withdrawn by A44 and corrected in the Results, missed in the Discussion echo. Corrected.
+`paper/paper.tex` and `docs/PAPER.md` are superseded drafts still carrying "H2 is partially
+supported" and "the study is pre-registered"; both now open with a do-not-cite banner.
+
+**H4 reclassified.** The manuscript said "H4 is therefore assessed on the per-instance
+analysis", which reads as though a post-freeze analysis were the pre-specified test. H4 as
+pre-specified is now reported as **unresolved** â€” its aggregate criterion is uninterpretable
+on schemas sharing four concepts â€” with the per-instance analysis labelled exploratory and
+explicitly not a substitute.
+
+**Nested CV is not a deviation.** Protocol Sec. 9.5 offers nested cross-validation *or* a
+strictly held-out validation set; Dataset B takes the second because nested CV would shuffle
+folds across the temporal split's boundary. The manuscript now states this as a
+protocol-permitted choice and adds what was implicit: tuning ran after the test partition was
+opened, so tuned results are post-hoc sensitivity analyses and no headline number comes from
+a tuned model.
+

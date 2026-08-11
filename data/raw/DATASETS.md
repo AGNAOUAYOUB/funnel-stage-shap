@@ -14,21 +14,25 @@ Protocol Sec. 5. This file is the human-readable companion to the machine-readab
 | Citation | Sakar, C.O., Polat, S.O., Katircioglu, M., Kastro, Y. (2019). *Real-time prediction of online shoppers' purchasing intention using multilayer perceptron and LSTM recurrent neural networks.* Neural Computing and Applications 31, 6893–6908. |
 | Status | **Present** in `data/raw/online_shoppers_intention.csv` |
 
-**Provenance status (amendment A5, partially resolved).** The local file
-`data/raw/online_shoppers_intention.csv` has SHA-256
-`b3055ee355f59134d851d32641183cb4a8b45def7124d2f50442a042f358e0d9`, which matches the
-value recorded in `provenance_A.json`, and its shape and prevalence match the protocol's
-expectation exactly (12,330 rows, ~15.47%).
+**Provenance status: VERIFIED (amendments A5 and A35 closed by A47, 2026-08-11).**
 
-What that establishes and what it does not: the file is stable and every reported result
-is traceable to this exact content. It does **not** establish that the file was fetched
-from the canonical UCI endpoint
-(`https://archive.ics.uci.edu/static/public/468/online+shoppers+purchasing+intention+dataset.zip`),
-because that endpoint serves a ZIP archive whose hash necessarily differs from the CSV it
-contains, so the two cannot be compared directly. Confirming the chain requires
-downloading the archive, extracting the CSV and comparing *that* hash to the value above —
-`funnel-shap fetch-a` performs the download step. Until then the provenance is
-self-consistent but not independently corroborated.
+The chain was closed by downloading the canonical UCI archive, extracting its single
+member, and comparing that member's digest against the local file's. Two distinct objects,
+two distinct digests, and it is the CSV pair that must match:
+
+| Object | Bytes | SHA-256 |
+| ------ | ----- | ------- |
+| Canonical archive (`…/static/public/468/…dataset.zip`) | 1,072,219 | `2972e6184d3ad7beaaa831d9fc2b059dc3ee29df69d1ec593c466a5cd8485d14` |
+| CSV extracted from that archive | 1,072,063 | `b3055ee355f59134d851d32641183cb4a8b45def7124d2f50442a042f358e0d9` |
+| Local `online_shoppers_intention.csv` | 1,072,063 | `b3055ee355f59134d851d32641183cb4a8b45def7124d2f50442a042f358e0d9` |
+
+The local file is byte-identical to the CSV the canonical endpoint serves. Shape and
+prevalence also match the protocol's expectation exactly (12,330 rows, ~15.47%).
+
+An earlier version of this file claimed the *archive* hash matched the dataset. That
+comparison is impossible — a ZIP's digest cannot equal that of a file inside it — and
+amendment A35 recorded the overstatement. The two digests above are now reported
+separately so the claim is checkable rather than merely asserted.
 
 
 **Non-causal flag (Sec. 7.4).** Dataset A carries whole-session aggregates with no event

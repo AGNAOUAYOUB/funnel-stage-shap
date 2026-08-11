@@ -36,7 +36,7 @@ CLASSIFICATION: dict[str, tuple[str, str, str]] = {
     "A2":  ("Implementation", "Active", "Sec. 3, Table 1"),
     "A3":  ("Implementation", "Active", "Sec. 3 (features)"),
     "A4":  ("Implementation", "Active", "Sec. 3 (sessionisation)"),
-    "A5":  ("Implementation", "Superseded in part by A35", "Sec. 3 (data sources)"),
+    "A5":  ("Implementation", "Open", "Sec. 3 (data sources)"),
     "A6":  ("Implementation", "Active", "Sec. 3 (cut-points)"),
     "A8":  ("Implementation", "Active", "Sec. 3 (cut-points)"),
     "A9":  ("Implementation", "Active", "Data and code availability"),
@@ -79,7 +79,12 @@ CLASSIFICATION: dict[str, tuple[str, str, str]] = {
     "A44": ("Exploratory", "Active", "Sec. 4, Table 4"),
     "A45": ("Exploratory", "Active", "Sec. 4, Table 7"),
     "A46": ("Reporting", "Active", "Sec. 3 (seeds)"),
+    "A47": ("Reporting", "Active", "Sec. 5, Table 12; data availability"),
 }
+
+#: Amendments that close an earlier open item, so the register can show the
+#: earlier entry as resolved rather than perpetually open.
+CLOSURES = {"A5": "A47", "A35": "A47"}
 
 
 def parse_log() -> list[dict[str, str]]:
@@ -124,6 +129,8 @@ def main() -> int:
     rows = []
     for e in sorted(entries, key=lambda e: sort_key(e["id"])):
         arm, status, location = CLASSIFICATION[e["id"]]
+        if e["id"] in CLOSURES:
+            status = "Closed by %s" % CLOSURES[e["id"]]
         number = sort_key(e["id"])[0]
         before_after = (
             "before" if (number < FIRST_POST_TEST or e["id"] == "A46") else "after"
@@ -161,8 +168,8 @@ def main() -> int:
         counts[r["arm"]] = counts.get(r["arm"], 0) + 1
     summary = (
         "\n## Counts\n\n"
-        "%d amendments in total (A1-A46, no A7, plus corrections A20b and A23b).\n\n"
-        % len(rows)
+        "%d amendments in total (A1-A%d, no A7, plus corrections A20b and A23b).\n\n"
+        % (len(rows), max(sort_key(r["id"])[0] for r in rows))
         + "".join("- %s: %d\n" % (k, counts[k]) for k in sorted(counts))
         + "- taken before test access: %d\n" % sum(1 for r in rows if r["test_access"] == "before")
         + "- taken after test access: %d\n" % sum(1 for r in rows if r["test_access"] == "after")

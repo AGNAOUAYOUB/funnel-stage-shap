@@ -20,7 +20,7 @@ retained. There is no A7. A46 was originally written as a second A30.
 | A2 | 2026-08-04 | Stage models are conditional on reaching the stage | before | Implementation | Active | Sec. 3, Table 1 |
 | A3 | 2026-08-04 | Dwell excludes the final prefix event | before | Implementation | Active | Sec. 3 (features) |
 | A4 | 2026-08-04 | Session IDs are re-derived rather than taken from `user_session` | before | Implementation | Active | Sec. 3 (sessionisation) |
-| A5 | 2026-08-04 | Dataset A provenance is a local copy | before | Implementation | Superseded in part by A35 | Sec. 3 (data sources) |
+| A5 | 2026-08-04 | Dataset A provenance is a local copy | before | Implementation | Closed by A47 | Sec. 3 (data sources) |
 | A6 | 2026-08-04 | RESOLVED — S1's cut-point moves to the second product interaction | before | Implementation | Active | Sec. 3 (cut-points) |
 | A8 | 2026-08-04 | RESOLVED — degenerate stage features and S1/S2 collapse | before | Implementation | Active | Sec. 3 (cut-points) |
 | A9 | 2026-08-04 | Python 3.13 is present on the machine; the project pins 3.11 | before | Implementation | Active | Data and code availability |
@@ -51,7 +51,7 @@ retained. There is no A7. A46 was originally written as a second A30.
 | A32 | 2026-08-07 | H1 was reported against the secondary metric | after | Confirmatory | Active | Sec. 4 (H1) |
 | A33 | 2026-08-07 | The RQ4 whole-session comparator was circular; replaced with a fitted model | after | Exploratory | Superseded by A43 | Sec. 4 (RQ4) |
 | A34 | 2026-08-07 | Protocol items implemented but not exercised | after | Reporting | Active | Appendix A |
-| A35 | 2026-08-07 | Dataset A provenance wording overstated what was verified | after | Reporting | Open | Data and code availability |
+| A35 | 2026-08-07 | Dataset A provenance wording overstated what was verified | after | Reporting | Closed by A47 | Data and code availability |
 | A36 | 2026-08-07 | Appendix exhibits added; single-seed provenance stated | after | Reporting | Active | figure captions |
 | A37 | 2026-08-07 | A figure redraw destroyed the only measured runtimes | after | Reporting | Active | Sec. 4 (computational cost) |
 | A38 | 2026-08-07 | Decision-support restructuring; error analysis is exploratory | after | Exploratory | Active | Sec. 5 (decision support) |
@@ -63,15 +63,16 @@ retained. There is no A7. A46 was originally written as a second A30.
 | A44 | 2026-08-07 | The fixed-cohort comparison repeated the A20b inference error; corrected | after | Exploratory | Active | Sec. 4, Table 4 |
 | A45 | 2026-08-07 | Permutation null for attribution: the S2 peak survives, price and engagement do not | after | Exploratory | Active | Sec. 4, Table 7 |
 | A46 | 2026-08-07 | Reported seed list in prose disagreed with the protocol and the code (Appendix B) | before | Reporting | Active | Sec. 3 (seeds) |
+| A47 | 2026-08-11 | Dataset A provenance closed; Table 12 moved to five seeds; environment frozen | after | Reporting | Active | Sec. 5, Table 12; data availability |
 
 ## Counts
 
-47 amendments in total (A1-A46, no A7, plus corrections A20b and A23b).
+48 amendments in total (A1-A47, no A7, plus corrections A20b and A23b).
 
 - Confirmatory: 7
 - Exploratory: 13
 - Implementation: 19
-- Reporting: 8
+- Reporting: 9
 - taken before test access: 18
-- taken after test access: 29
+- taken after test access: 30
 - superseded or open: 5
