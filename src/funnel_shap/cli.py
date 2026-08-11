@@ -1058,6 +1058,65 @@ def common_cohort_cmd(
         run.log_artifact(out)
 
 
+@app.command("error-structure")
+def error_structure_cmd(
+    suffix: str = _SUFFIX_OPT,
+    protocol: str = "temporal",
+    seeds: str = typer.Option("", help="Comma-separated subset of the frozen seed list"),
+    track: bool = typer.Option(True, help="Log the run to MLflow (Sec. 6.2)"),
+) -> None:
+    """Confusion structure at each stage's operating point, over five seeds.
+
+    Both the fit and the validation-selected threshold vary with the seed, so a
+    single-seed confusion matrix conditions on one draw of each (amendment A46).
+    """
+    paths.ensure_dirs()
+
+    from .data.journey import MODELLING_STAGES
+    from .models.error_structure import error_structure_table
+    from .models.run_stages import run_stage_models
+    from .seeds import SEEDS
+
+    features = {}
+    for stage in MODELLING_STAGES:
+        path = paths.PROCESSED / f"features_{suffix}_{stage}.parquet"
+        if path.exists():
+            features[stage] = pl.read_parquet(path)
+    if not features:
+        raise typer.BadParameter(f"no stage features for suffix {suffix!r}")
+
+    chosen_seeds = tuple(int(s) for s in seeds.split(",") if s.strip()) or SEEDS
+    runs = run_stage_models(
+        features, suffix=suffix, protocol=protocol, models=("lightgbm",),
+        seeds=chosen_seeds, feature_sets=("full",), n_resamples=2000,
+    )
+    table = error_structure_table(runs)
+    out = paths.TABLES / f"error_structure_{suffix}.csv"
+    table.write_csv(out)
+
+    typer.echo("")
+    with pl.Config(tbl_cols=24, tbl_width_chars=200):
+        typer.echo(table)
+    typer.echo("")
+    typer.echo(f"-> {out}")
+
+    from .tracking import track_run
+
+    with track_run(
+        f"error-structure/{suffix}",
+        experiment="error-structure",
+        params={"suffix": suffix, "protocol": protocol,
+                "seeds": ",".join(str(s) for s in chosen_seeds)},
+        enabled=track,
+    ) as run:
+        for row in table.to_dicts():
+            run.log_metrics({
+                f"flag_rate.{row['stage']}": row["flag_rate"],
+                f"f1_over_trivial.{row['stage']}": row["f1_over_trivial"],
+            })
+        run.log_artifact(out)
+
+
 @app.command("permutation-null")
 def permutation_null_cmd(
     suffix: str = _SUFFIX_OPT,

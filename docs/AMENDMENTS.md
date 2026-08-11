@@ -3,10 +3,24 @@
 Protocol v1.0 states: "Any deviation after freeze is logged in a dated amendment appendix."
 Each entry records the date, the affected protocol sections, what changed, and why.
 
-The protocol is **not yet frozen**: the environment is pinned and the data/feature layer is
-built and tested, but no split has been written to `data/processed/splits/` and the test
-partition has never been read. Entries below are pre-freeze decisions and open questions,
-recorded so the eventual freeze is auditable.
+**Status of the protocol.** v1.0 was version-frozen before the test partition was opened and
+is distributed with the manuscript. It was **not** deposited in a time-stamping registry, so
+it is an auditable record of intent rather than third-party-certified priority. Nothing in
+this log should be read as claiming otherwise.
+
+**Chronology.** Entries A1-A18 and A46 precede any test-partition access: they are
+implementation and design decisions taken while building the data and feature layers. The
+test partition was first opened at **A19**, which reports the stage improvement curve.
+Entries from A19 onward were therefore taken with test results visible and are marked
+accordingly in the register below. The register is the authoritative index; the narrative
+entries that follow it are the evidence.
+
+**Identifier conventions.** A `b` suffix marks a correction that supersedes the entry of the
+same number -- A20b supersedes A20, A23b supersedes A23 -- and both are retained so the error
+and its correction stay visible. There is no A7: the number was skipped when the log was
+first written and has never been used. A9 appears out of sequence because it was appended
+after later entries; its content is a pre-freeze environment decision. A46 was originally
+written as a second A30 and is renumbered here.
 
 ---
 
@@ -919,12 +933,14 @@ per-instance H4 table, and any GRU PR-AUC values cited in the paper will change.
 
 ---
 
-## 2026-08-07 — Alignment with the registered protocol v1.0
+## 2026-08-07 — Alignment with the pre-specified protocol v1.0
 
 The registered protocol PDF was supplied on 2026-08-07 and every section was
 checked against the implementation. Entries A30-A33 record what that audit found.
 
-### A30. Reported seed list in prose disagreed with the protocol and the code (Appendix B)
+### A46. Reported seed list in prose disagreed with the protocol and the code (Appendix B)
+
+*Originally written as a second A30. Renumbered because A30 was already in use for the GRU convergence entry, which the code and manuscript reference; nothing references this one. Chronologically it belongs with the 2026-08-07 protocol-alignment batch, and it precedes any test-partition access because it corrects prose, not analysis.*
 
 **What was wrong.** Protocol Appendix B fixes `SEEDS = [7, 17, 23, 42, 101]`, and
 `seeds.py` and every result table use exactly that. But the manuscript, the README and

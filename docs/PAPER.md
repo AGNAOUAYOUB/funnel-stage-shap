@@ -1,3 +1,10 @@
+> **SUPERSEDED DRAFT — do not cite, do not copy numbers from this file.**
+>
+> The current manuscript is `paper/submission/main.tex`. This long-form draft
+> predates amendments A41–A46 and still contains claims the study has since
+> retracted. It is retained as part of the audit trail; see
+> `docs/AMENDMENT_REGISTER.md` for what stands and what does not.
+
 # Funnel-Stage SHAP: temporal attribution trajectories and their faithfulness in e-commerce purchase prediction
 
 **Ayoub Agnaou**
@@ -112,10 +119,11 @@ parts:
    against recurrent-model attributions both as aggregate rankings and, critically, at the
    level of individual journeys.
 
-The study is pre-registered. Every analytic decision was fixed before the test partition was
-opened, and each subsequent deviation is recorded with a date and rationale in a public
-amendment log (Appendix A). Twenty-nine amendments were logged, several of which reverse an
-initial decision on the basis of measurement; we regard this record as part of the
+The study follows a **pre-specified** protocol — version-frozen before the test partition was
+opened, but not deposited in a time-stamping registry, so it is an auditable record of intent
+rather than a registration. Each subsequent deviation is recorded with a date and rationale in
+a public amendment log (Appendix A). Forty-seven amendments are now registered, several of
+which reverse an initial decision on the basis of measurement; we regard this record as part of the
 contribution rather than an embarrassment to be hidden.
 
 ### 1.2 Structure
@@ -487,7 +495,7 @@ Both stage pairs are fully distinct — no session shares a cut-point between S1
 between S2 and S3 (mean gaps 2.49 and 5.37 events) — so the trajectories compare genuinely
 different prefixes.
 
-**H2 is partially supported.** Its behavioural arm holds: attribution to engagement and tempo
+**H2 is not supported** (revised; see amendment A45). Its behavioural arm holds: attribution to engagement and tempo
 doubles from 0.169 at awareness to 0.338 at intent, the largest single shift in the table. Its
 context arm **cannot be tested on Dataset B**, because traffic source and device are absent
 from the schema (Table 2). Price leads at S1 and is the nearest available product-context

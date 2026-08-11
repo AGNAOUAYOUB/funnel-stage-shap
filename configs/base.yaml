@@ -21,8 +21,14 @@ run:
 
   tuning:
     optuna_trials: 100
-    nested_cv_outer: 5
-    nested_cv_inner: 3
+    # Protocol Sec. 9.5 permits either nested CV or a strictly held-out
+    # validation set. Dataset B uses the held-out set, because nested CV would
+    # shuffle folds across the temporal split's time boundary. These fold counts
+    # therefore apply only to the static Dataset A benchmark; they are carried
+    # here so the protocol option remains configurable, and no Dataset B run
+    # reads them.
+    nested_cv_outer: 5      # Dataset A only
+    nested_cv_inner: 3      # Dataset A only
 
   explain:
     tree_shap_mode: interventional

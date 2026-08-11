@@ -194,20 +194,31 @@ attributions are compared against recurrent-model attributions both as
 aggregate rankings and, critically, at the level of individual journeys.
 
 The study follows a design science research methodology
-\citep{hevner2004design} under a written protocol frozen in advance
-(v1.0): every analytic decision---research questions, hypotheses, stage
-cut-points, feature families, splitting, models, metrics, thresholds and
-statistical procedures---was fixed before the test partition was opened, and
-each subsequent deviation is recorded with a date, a rationale and the
-affected protocol section in a public amendment log (Appendix~A). We
-describe this as a pre-specified rather than a publicly registered protocol,
-and the distinction is deliberate: the document was version-frozen and is
-distributed with the manuscript, but it was not deposited in a
-time-stamping registry, so readers should weight it as an auditable record
-of intent rather than as third-party-certified priority.
-Forty-three amendments were logged, several of which reverse an initial
-decision on the basis of measurement; we regard this record as part of the
-contribution rather than an embarrassment to be hidden.
+\citep{hevner2004design} under a written protocol (v1.0) that fixed the
+research questions, hypotheses, stage cut-points, feature families,
+splitting, models, metrics, thresholds and statistical procedures, and was
+version-frozen before the test partition was opened. Every subsequent
+decision is recorded in a dated amendment log distributed with the
+manuscript.
+
+Three qualifications belong with that claim, because the strength of a
+protocol is exactly the strength of its weakest link.
+\emph{First, this is a pre-specified protocol, not a registered one.} The
+document was version-frozen and is distributed with the manuscript, but it
+was not deposited in a time-stamping registry, so it should be weighted as an
+auditable record of intent rather than as third-party-certified priority.
+\emph{Second, the log is not a record of a study that went to plan.}
+Forty-seven amendments are registered. Eighteen precede any test-partition
+access and are implementation decisions; twenty-nine follow it. Five claims
+were retracted after later analysis contradicted them, and two hypothesis
+verdicts were reversed.
+\emph{Third, not everything reported here was pre-specified.} Thirteen
+analyses were added after the freeze, are labelled exploratory at every point
+of use, and are listed in Appendix~\ref{app:alignment}. The register
+accompanying the log states, for each amendment, its date, whether it preceded
+test access, whether it belongs to the confirmatory or the exploratory arm,
+whether it still stands, and where this manuscript reports it. We regard that
+record as part of the contribution rather than an embarrassment to be hidden.
 
 Four empirical findings structure the paper. First, predictive performance
 does not improve along the funnel, contrary to the pre-specified
@@ -791,15 +802,26 @@ validation by F1.
 Headline stage models use the libraries' default hyperparameters. A tuning
 study---Optuna \citep{akiba2019optuna} TPE search, 100 trials per stage over
 fixed search spaces, maximising validation PR-AUC---is reported as a
-robustness analysis (Section~\ref{sec:results-sensitivity}). A held-out
-validation set is used rather than nested cross-validation because the
-temporal split forbids shuffling folds across the time boundary. Search
-spaces are fixed in source code so a run cannot silently widen them, and
-studies persist to reopenable storage. Keeping defaults as the headline
-keeps the explanation layers attached to the exact models they explain;
-tuning improves S3 and changes no conclusion. Tuning and threshold selection
-both touch the validation partition, a double use acknowledged in
-Section~\ref{sec:limitations}.
+robustness analysis (Section~\ref{sec:results-sensitivity}).
+
+The protocol offered two routes for tuning: nested cross-validation, or a
+strictly held-out validation set touched only during tuning. We take the
+second, and the choice is a protocol-permitted alternative rather than a
+deviation, but it is not arbitrary. Nested cross-validation would shuffle
+folds across the time boundary of a temporal split, which is precisely the
+leakage the temporal protocol exists to prevent; it remains the appropriate
+route for the static Dataset~A benchmark, where there is no ordering to
+violate. Search spaces are fixed in source code so a run cannot silently
+widen them, and studies persist to reopenable storage.
+
+Two consequences follow and are stated rather than buried. Tuning ran
+\emph{after} the default-hyperparameter models had already opened the test
+partition, so tuned results are a post-hoc sensitivity analysis and are
+reported only as such: no headline number, in the abstract or elsewhere, comes
+from a tuned model. And tuning and threshold selection both touch the
+validation partition, a double use acknowledged in
+Section~\ref{sec:limitations}. Keeping defaults as the headline also keeps the
+explanation layers attached to the exact models they explain.
 
 \subsection{Explanation protocol}
 \label{sec:methods-explain}
@@ -1556,18 +1578,25 @@ The GRU is competitive with the tree models---test PR-AUC 0.124 against
 0.131 at S1 and 0.565 against 0.568 at S3---so disagreement below is not
 attributable to one incompetent arm.
 
-The pre-specified test was an aggregate one: Spearman correlation between the
-two paradigms' concept rankings, against a threshold of 0.6. It cannot be
-interpreted, and we report that rather than the number. The schemas share only
-four or five mappable concepts, and Spearman on four items takes a handful of
-discrete values, so the statistic has almost no resolution and no useful null.
-The pre-registration did not anticipate how few concepts the schemas would
-share. The aggregate values are given in Table~\ref{tab:h4} for completeness
-and carry no weight here.
+\textbf{The pre-specified H4 test is uninterpretable, and no other test
+substitutes for it.} H4 fixed an aggregate criterion: Spearman correlation
+between the two paradigms' concept rankings, against a threshold of 0.6. The
+schemas turned out to share only four or five mappable concepts, and Spearman
+on four items takes a handful of discrete values, so the statistic has almost
+no resolution and no useful null. The protocol did not anticipate how few
+concepts the schemas would share. The aggregate values appear in
+Table~\ref{tab:h4} and are reported descriptively; we decline to convert them
+into a verdict in either direction. \emph{H4 as pre-specified is therefore
+unresolved rather than supported or refuted.}
 
-\textbf{H4 is therefore assessed on the per-instance analysis}, which is
-well-powered: for each shared concept, tree and sequence attributions are
-correlated across 350+ shared sessions, over five seeds.
+A per-instance analysis was added after the freeze to obtain evidence the
+aggregate test could not provide: for each shared concept, tree and sequence
+attributions are correlated across 350+ shared sessions, over five seeds. This
+analysis is \textbf{exploratory} (amendments A23b and A30). It was not
+pre-specified, it does not stand in for the pre-specified criterion, and it
+cannot confirm a hypothesis it was designed after seeing. What it can do is
+supply well-powered evidence on the underlying question, and that evidence
+points away from convergence.
 
 \begin{table}[t]
 \centering
@@ -1591,10 +1620,12 @@ S3 & +0.600 & +0.046 & 2 of 5 \\
 
 Per-instance agreement is indistinguishable from zero at every stage, and
 only 3 of 14 (stage, concept) pairs hold a consistent sign across seeds.
-\textbf{The two paradigms do not agree about individual customers}, and this
-is the finding that bears on practice: a system surfacing per-customer
-explanations is making a claim the evidence does not support, even where the
-same models rank concepts similarly in aggregate. The comparison
+\textbf{On exploratory evidence, the two paradigms do not agree about
+individual customers.} That is the finding which bears on practice: a system
+surfacing per-customer explanations is making a claim this evidence does not
+support, even where the same models rank concepts similarly in aggregate. It
+is offered as a well-powered observation, not as a substitute verdict on H4.
+The comparison
 conflates differences in architecture, input representation and explanation
 algorithm, and the observed disagreement is accordingly an upper bound on
 conceptual divergence rather than a pure measure of it; quantifying the
@@ -2074,11 +2105,14 @@ Unlike most such readings, this one is testable within the present data, and
 Section~\ref{sec:results-cohort} tests it. If the decline were a property of
 what the prefix contains, it would persist when every model is scored on the
 same customers; if it were a property of who remains, it would disappear. It
-disappears. On a single cohort of sessions reaching every stage, lift is flat
-to within roughly three seed standard deviations
-($1.047 \to 1.032 \to 1.066$) and ROC-AUC rises slightly rather than falling.
-The selection account is therefore supported and the alternative---that later
-prefixes carry less usable information---is not. Two implications follow. The
+disappears. On a single cohort of sessions reaching every stage, lift runs
+$1.047 \to 1.032 \to 1.066$ and every pairwise bootstrap interval contains
+zero: the three stages are not distinguishable from one another, and the two
+earlier ones are not distinguishable from chance. The selection account is
+therefore supported and the alternative---that later prefixes carry less
+usable information---is not. The support is the \emph{absence} of the decline,
+not a reversal of it; the intervals are too wide to establish a small effect
+in either direction. Two implications follow. The
 theoretical one is that the funnel effect documented here belongs to the
 sampling structure of staged journeys rather than to the information content
 of behavioural sequences, which narrows what may be generalised from it: any
@@ -2110,9 +2144,11 @@ with lift as the cross-stage metric, stage-conditioned attribution,
 pre-specified validation with per-instance agreement, the static
 contrast---that conventional pipelines omit, which is the sense in which
 the artifact, and not merely the dataset, generates the knowledge. The
-bottom line is also the study's epistemic posture: three of the four
-pre-specified hypotheses were not supported, and all four are reported as
-found.
+bottom line is also the study's epistemic posture. H1, H2 and H3 were tested
+as pre-specified and none was supported. H4's pre-specified test proved
+uninterpretable on this data, so it is reported as unresolved rather than
+converted into a verdict, with the exploratory per-instance evidence stated
+separately. All four are reported as found.
 
 
 \subsection{Attribution migration and the staged journey}
@@ -2179,7 +2215,7 @@ which the explanations are least trustworthy, though on one measure rather
 than the two an earlier reading claimed. Per-instance cross-paradigm
 agreement is $-0.018$, the only negative value, with no concept holding a
 consistent sign across seeds. Faithfulness is 0.494, nominally below the
-pre-registered threshold of 0.5, but the shortfall is 0.03 of a standard
+pre-specified threshold of 0.5, but the shortfall is 0.03 of a standard
 deviation and the gap to the best stage four tenths of one
 (Section~\ref{sec:results-quality}); it is recorded as a pre-specified
 failure and not treated as evidence. What does distinguish S2 substantively
@@ -2386,16 +2422,18 @@ time or an average over regimes the journey keeps distinct. Funnel-Stage
 SHAP enforces the prefix constraint at the representation level, conditions
 both model and explanation on the funnel stage, and validates the resulting
 explanations for faithfulness, stability and reproducibility. Applied
-end-to-end, it made visible evidence that refuted one pre-specified
-expectation (predictive performance does not improve along the funnel;
-ranking skill falls, and the direction of the effect depends on which
-normalisation is applied),
-quantified a second (attribution mass migrates, with navigation behaviour
-peaking mid-funnel), and split a third (explanation paradigms agree in
-aggregate and disagree per instance). Each finding is invisible to the
-standard pipeline: the first without reporting chance level alongside
-performance, the second without stage conditioning, the third without
-instance-level validation.
+end-to-end, it refuted three pre-specified expectations and left a fourth
+unresolved. Predictive performance does not improve along the funnel: ranking
+skill falls, and the direction depends on which normalisation is applied.
+Attribution mass migrates, but only the mid-funnel navigation peak survives a
+permutation null, so the behavioural trajectory H2 predicted is not evidence
+of the mechanism it predicted. Navigation entropy adds no unique predictive
+value once the rest of the model is accounted for. The cross-paradigm test
+could not be interpreted on schemas sharing four concepts; the exploratory
+per-instance analysis that replaced it finds no agreement about individual
+customers. Each finding is invisible to the standard pipeline: the first
+without reporting chance level alongside performance, the second without both
+stage conditioning and a null, the last without instance-level validation.
 
 Two further analyses, prompted by the results rather than pre-specified,
 determine how the first finding should be read. Scoring every stage model on
