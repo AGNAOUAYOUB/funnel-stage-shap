@@ -50,8 +50,8 @@
 
 \begin{document}
 
-\title{\vspace{-2em}Funnel-Stage SHAP: a design science framework for
-       stage-conditioned explainable purchase prediction in e-commerce}
+\title{\vspace{-2em}Funnel-Stage SHAP: temporally valid explanation for
+       mid-session targeting decisions in e-commerce}
 \date{}
 \author{}
 \maketitle
@@ -87,8 +87,8 @@ shows that only the mid-funnel navigation peak (3.5\%, 22.4\%, 7.4\%) carries
 attribution a permuted model cannot manufacture.
 \end{abstract}
 
-\noindent\textbf{Keywords:} explainable AI; SHAP; purchase prediction;
-customer journey; clickstream; decision support; design science
+\noindent\textbf{Keywords:} explainable AI; SHAP; decision support;
+customer journey; purchase prediction; temporal validity; design science
 
 \vspace{1em}
 
@@ -281,7 +281,7 @@ advances substitute self-attention for recurrence:
 convolutional components improves session-based recommendation by capturing
 global context and local sequential patterns simultaneously.
 
-Tree-based ensemble learning nevertheless remains highly competitive when
+Tree-based ensemble learning nevertheless remains competitive when
 behavioural information is represented as structured features. Gradient
 boosting methods---XGBoost \citep{chen2016xgboost}, LightGBM
 \citep{ke2017lightgbm} and CatBoost \citep{prokhorenkova2018catboost}---offer
@@ -409,8 +409,8 @@ only gradually since \citet{adadi2018peeking} observed that 5\% of 381
 surveyed papers focused explicitly on evaluation. Against this baseline,
 the further question this paper raises---whether attributions remain
 faithful, stable and reproducible \emph{across} successive stages of an
-evolving journey---is not merely under-studied but largely unposed, since
-it presupposes a validation step that most applied work omits entirely.
+evolving journey---is largely unposed, since it presupposes a
+validation step that most applied work omits entirely.
 
 \subsection{Targeting value versus predictive accuracy}
 \label{sec:related-uplift}
@@ -1027,7 +1027,7 @@ each other, and selecting among them after seeing the results would be the
 metric-shopping the pre-specification exists to prevent.
 Figure~\ref{fig:curve} makes the performance dynamics visible across stages. In the
 left panel, raw PR-AUC ends at 0.568 against a starting 0.131, and a naive
-reading would conclude that prediction improves dramatically as customers
+reading would conclude that prediction improves sharply as customers
 approach purchase; but the chance-level curve tracks it almost point for
 point, because chance-level PR-AUC equals the prevalence and prevalence
 varies six-fold across the conditional stage populations---even the dip
@@ -1430,8 +1430,8 @@ $0.8925 \pm 0.0002$ on the same 38,715 test sessions at the same prevalence
 --- far above the 0.131 of the strongest stage model, and not attributable to
 leakage. The gap measures the value of information the stage
 models are forbidden to use: what a customer does \emph{after} the decision
-point is highly diagnostic of what they eventually do, which is precisely why
-retrospective explanations look so convincing and precisely why they cannot
+point predicts the outcome far better than anything observable before it,
+which is why retrospective explanations look convincing and why they cannot
 guide an intervention.
 
 \begin{table}[t]
@@ -2214,8 +2214,8 @@ One stage resists the framework's own account of itself, and the difficulty
 is worth stating directly rather than distributing across the results.
 Consideration (S2) is where the attribution structure is most distinctive:
 navigation entropy rises from 3.5\% to 22.4\% of attribution mass and falls
-again to 7.4\%, the single non-monotone trajectory in the study and the one
-that most clearly identifies an intervention window. It is also the stage at
+again to 7.4\%, the single non-monotone trajectory in the study and the only one
+to clear a permutation null. It is also the stage at
 which the explanations are least trustworthy, though on one measure rather
 than the two an earlier reading claimed. Per-instance cross-paradigm
 agreement is $-0.018$, the only negative value, with no concept holding a
@@ -2299,31 +2299,37 @@ model as a whole.
 \subsection{Implications for decision support and practice}
 \label{sec:discussion-practice}
 
-Four implications follow for intelligent decision support. First,
-prediction and explanation should share informational constraints by
-architecture, not convention: an explanation layer bolted onto a
-whole-session model can cite behaviour that postdates the decision point,
-and no amount of visualisation repairs that. Second, intervention design
-can key on the stage-conditioned profiles, but only on the parts of them that
-clear a permutation null: browsing breadth at exploration, favouring
-assortment interventions, and cross-category comparison at consideration,
-favouring comparison support. The families with the largest nominal shares ---
-price context and engagement --- do not clear it, and an intervention designed
-around them would be designed around the correlation structure of the feature
-matrix. That distinction is not visible in a conventional attribution report,
-and drawing it is part of what the validation layer is for. Third, an operating point is a decision variable and
-should be reported as one. The same intent-stage model looks worthless or
-best-in-class depending on whether its threshold is chosen by $F_1$ or by
-budget, so a decision-support system should expose the flag rate to the
-manager rather than fix it inside a model-selection step. Fourth,
-explanation
-validation belongs in deployment pipelines: the per-stage quality table is
-cheap to compute, and in these data it would have flagged S2 as the stage
-where explanations deserve least trust---something no aggregate metric
-reveals. The per-instance H4 result adds a governance caution: aggregate
-agreement between explanation methods does not license per-customer
-narratives, and systems that surface individual explanations should
-validate at the instance level, not the population level.
+Four implications follow for intelligent decision support.
+
+\emph{Prediction and explanation should share informational constraints by
+architecture, not by convention.} An explanation layer bolted onto a
+whole-session model can cite behaviour that postdates the decision point, and
+no amount of visualisation repairs that.
+
+\emph{Intervention design can key on the stage-conditioned profiles, but only
+on the parts of them that clear a permutation null.} That leaves browsing
+breadth at exploration, favouring assortment interventions, and
+cross-category comparison at consideration, favouring comparison support. The
+families with the largest nominal shares --- price context and engagement ---
+do not clear it, so an intervention designed around them would be designed
+around the correlation structure of the feature matrix. A conventional
+attribution report does not draw that distinction; drawing it is part of what
+the validation layer is for.
+
+\emph{An operating point is a decision variable and should be reported as
+one.} The same intent-stage model looks worthless or best-in-class depending
+on whether its threshold is chosen by $F_1$ or by budget, so a
+decision-support system should expose the flag rate to the manager rather
+than fix it inside a model-selection step.
+
+\emph{Explanation validation belongs in the deployment pipeline.} The
+per-stage quality table is cheap to compute, and in these data it would have
+flagged S2 as the stage where explanations deserve least trust --- something
+no aggregate metric reveals. The per-instance H4 result adds a
+governance caution: aggregate agreement between explanation methods does not
+license per-customer narratives, so a system that surfaces individual
+explanations should validate at the instance level rather than the population
+level.
 
 \subsection{Methodological implications}
 \label{sec:discussion-method}
@@ -2402,18 +2408,17 @@ validation of stage-conditioned interventions remains future work.
 \subsection{Future work}
 \label{sec:future}
 
-Beyond the extensions above: multi-month windows to relieve S3's power
-limitation and reduce boundary attrition; off-stream covariates to test the
-falsifiable prediction of Section~\ref{sec:discussion-decline}; finer stage
-lattices approaching per-event explanation trajectories; within-method
-variability baselines for cross-paradigm comparison; and deployment studies
-measuring whether stage-conditioned explanations change intervention
-decisions. The most consequential extension is a randomised one. The
-flag-rate sweep establishes which stage selects best under a given budget but
-cannot establish which stage \emph{responds} best, and a field experiment
+The consequential extension is a randomised one. The flag-rate sweep
+establishes which stage \emph{selects} best under a given budget but cannot
+establish which stage \emph{responds} best, and a field experiment
 randomising exposure within stage would supply the missing quantity, allowing
 stage-conditioned attribution to be joined to uplift estimation rather than
-to propensity alone.
+to propensity alone. Two smaller extensions follow directly from limits
+identified above: a multi-month observation window would relieve S3's
+power limitation and reduce boundary attrition, and off-stream
+covariates would test the falsifiable prediction of
+Section~\ref{sec:discussion-decline} --- that context the clickstream cannot
+observe is what carries the residual outcome uncertainty at the cart.
 
 %==============================================================================
 \section{Conclusion}
@@ -2451,13 +2456,11 @@ intent stage ranks worst of the three and, at budgets of a twentieth of
 sessions or more, targets best. Both results narrow the claim the study can
 make and sharpen the recommendation it can offer.
 
-The broader argument is that explanation quality tracks predictive signal
-and should be validated where decisions are made---per stage, and where
-individual customers are concerned, per instance. As machine learning
-systems increasingly operate on evolving behavioural streams, temporal
-fidelity is not an optional refinement of explainable AI but a precondition
-for explanations that support, rather than merely decorate, operational
-decisions.
+The broader argument is that explanation quality tracks predictive signal and
+should be validated where decisions are made---per stage, and where
+individual customers are concerned, per instance. An explanation computed
+from information the decision-maker did not yet have cannot support the
+decision they face, however faithful it is to the model.
 
 % CRediT roles, competing-interest and generative-AI declarations, funding and
 % acknowledgements are on the separate title page, since each identifies the

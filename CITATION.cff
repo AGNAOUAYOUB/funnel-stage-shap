@@ -1,7 +1,7 @@
 cff-version: 1.2.0
 title: >-
-  Funnel-Stage SHAP: a design science framework for stage-conditioned
-  explainable purchase prediction in e-commerce
+  Funnel-Stage SHAP: temporally valid explanation for mid-session targeting
+  decisions in e-commerce
 message: >-
   If you use this software or its results, please cite the accompanying
   manuscript. The DOI below is a placeholder until the repository is deposited.
@@ -25,10 +25,10 @@ abstract: >-
 keywords:
   - explainable AI
   - SHAP
-  - purchase prediction
-  - customer journey
-  - clickstream
   - decision support
+  - customer journey
+  - purchase prediction
+  - temporal validity
   - design science
 license: '[DATA REQUIRED: licence not yet chosen]'
 version: 1.0.0
