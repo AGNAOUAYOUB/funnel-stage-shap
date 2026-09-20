@@ -3,11 +3,13 @@ collapses \\\\ to \\, which silently turns regexes like \\\\ref into \\r
 (carriage return) and makes the check pass by matching nothing."""
 
 import os
+from pathlib import Path
 import re
 
-TEX = r"C:\Users\Pc\Desktop\dynamic_xai\paper\submission\main.tex"
-BIB = r"C:\Users\Pc\Desktop\dynamic_xai\paper\submission\references.bib"
-FIGDIR = r"C:\Users\Pc\Desktop\dynamic_xai\paper\figures"
+HERE = Path(__file__).resolve().parent
+TEX = HERE / "main.tex"
+BIB = HERE / "references.bib"
+FIGDIR = HERE.parent / "figures"
 
 tex = open(TEX, encoding="utf-8").read()
 bib = open(BIB, encoding="utf-8").read()

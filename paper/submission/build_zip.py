@@ -15,6 +15,10 @@ with tempfile.TemporaryDirectory() as staging:
     # Copy manuscript files
     shutil.copy(os.path.join(here, "main.tex"), os.path.join(staging, "main.tex"))
     shutil.copy(os.path.join(here, "references.bib"), os.path.join(staging, "references.bib"))
+    if os.path.exists(os.path.join(here, "titlepage.tex")):
+        shutil.copy(os.path.join(here, "titlepage.tex"), os.path.join(staging, "titlepage.tex"))
+    if os.path.exists(os.path.join(here, "highlights.txt")):
+        shutil.copy(os.path.join(here, "highlights.txt"), os.path.join(staging, "highlights.txt"))
     if os.path.exists(os.path.join(here, "README.md")):
         shutil.copy(os.path.join(here, "README.md"), os.path.join(staging, "README.md"))
         
