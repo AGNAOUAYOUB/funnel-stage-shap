@@ -237,7 +237,7 @@ def train_gru(
     best_state, best_score = None, -np.inf
     epochs_without_improvement = 0
 
-    for epoch in range(epochs):
+    for _epoch in range(epochs):
         model.train()
         order = np.random.permutation(len(train_idx))
         for start in range(0, len(order), batch_size):

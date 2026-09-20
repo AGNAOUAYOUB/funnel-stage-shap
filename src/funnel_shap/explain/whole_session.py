@@ -143,7 +143,7 @@ def _fallback_group(feature: str) -> str | None:
 
 def aggregate_shares(
     columns: list[str],
-    normalised: "np.ndarray",
+    normalised: np.ndarray,
     grouping: dict[str, str] | None = None,
 ) -> dict[str, float]:
     """Sum normalised attribution mass into the supplied grouping.

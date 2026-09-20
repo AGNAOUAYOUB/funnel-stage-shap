@@ -91,9 +91,11 @@ def test_strict_mode_surfaces_failures(tmp_path, monkeypatch) -> None:
 
     monkeypatch.setattr(mlflow, "set_experiment", boom)
 
-    with pytest.raises(RuntimeError, match="unreachable"):
-        with track_run("unit", experiment="dead", tracking_dir=tmp_path, strict=True):
-            pass
+    with (
+        pytest.raises(RuntimeError, match="unreachable"),
+        track_run("unit", experiment="dead", tracking_dir=tmp_path, strict=True),
+    ):
+        pass
 
 
 def test_non_numeric_metrics_are_skipped_not_fatal(tmp_path) -> None:

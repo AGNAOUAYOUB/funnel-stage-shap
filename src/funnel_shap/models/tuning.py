@@ -215,7 +215,7 @@ def tune_gru(
     """
     import optuna
 
-    from .sequence import predict_sequences, train_gru
+    from .sequence import train_gru
 
     optuna.logging.set_verbosity(optuna.logging.WARNING)
     space = SEARCH_SPACES["gru"]

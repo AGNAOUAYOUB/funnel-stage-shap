@@ -19,8 +19,6 @@ htmlcov/
 !/data/raw/DATASETS.md
 !/data/**/*.dvc
 
-# Build artefacts — regenerate with paper/submission/build_zip.ps1
-/paper/funnel_shap_overleaf.zip
 
 # Experiment output
 /experiments/mlruns/

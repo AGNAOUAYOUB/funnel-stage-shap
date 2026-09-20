@@ -18,7 +18,6 @@ from pathlib import Path
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
 
 from ..paths import FIGURES  # noqa: E402
 from .diagrams import (  # noqa: E402

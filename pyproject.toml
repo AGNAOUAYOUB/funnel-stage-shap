@@ -3,6 +3,7 @@ name = "funnel-shap"
 version = "0.1.0"
 description = "Dynamic Explainable AI for Sequential Purchase Prediction: A Funnel-Stage SHAP Framework"
 authors = [{ name = "Ayoub Agnaou" }]
+license = { text = "MIT" }
 readme = "README.md"
 requires-python = "==3.11.*"
 

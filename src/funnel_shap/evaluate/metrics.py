@@ -30,6 +30,7 @@ from sklearn.metrics import (
 
 from ..stats.bootstrap import BootstrapResult, bootstrap_ci_multi
 
+
 def normalised_pr_gain(y_true: np.ndarray, y_score: np.ndarray) -> float:
     """Normalised PR-Gain: (PR-AUC - pi) / (1 - pi).
 

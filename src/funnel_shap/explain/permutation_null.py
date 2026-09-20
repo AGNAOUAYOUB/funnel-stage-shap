@@ -137,7 +137,7 @@ def run_permutation_null(
             )
         )
         if progress:
-            print("permutation round %d/%d done" % (index + 1, n_rounds), flush=True)
+            print(f"permutation round {index + 1}/{n_rounds} done", flush=True)
 
     return observed, draws
 
