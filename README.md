@@ -280,18 +280,3 @@ Contributions are welcome! Please follow these steps:
 
 This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
 
----
-
-## Citation
-
-If you use **Funnel-Stage SHAP** in your research, decision support systems, or production pipelines, please cite:
-
-```bibtex
-@article{Agnaou2026FunnelStageSHAP,
-  author    = {Agnaou, Ayoub},
-  title     = {Dynamic Explainable AI for Sequential Purchase Prediction: A Funnel-Stage SHAP Framework for Digital Consumer Journeys},
-  journal   = {Decision Support Systems},
-  year      = {2026},
-  publisher = {Elsevier}
-}
-```
